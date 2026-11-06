@@ -1,5 +1,5 @@
 .tradenote-view-container .view-content { padding: 0; }
-.tradenote-dashboard { --stock-observation: var(--text-accent); --stock-validation: var(--text-normal); --stock-action: var(--text-accent); --stock-reflection: var(--text-normal); --stock-plan: var(--text-accent); height: 100%; overflow: auto; }
+.tradenote-dashboard { --stock-observation: var(--text-accent); --stock-us-market: var(--text-normal); --stock-validation: var(--text-normal); --stock-action: var(--text-accent); --stock-reflection: var(--text-normal); --stock-plan: var(--text-accent); height: 100%; overflow: auto; }
 .tradenote-dashboard-inner { box-sizing: border-box; margin: 0 auto; max-width: 1280px; padding: 26px 34px 56px; }
 .tradenote-dashboard h2, .tradenote-dashboard h3 { margin: 0; }
 .tradenote-dashboard-header { align-items: center; border-bottom: 1px solid var(--background-modifier-border); display: flex; justify-content: space-between; margin-bottom: 24px; padding-bottom: 17px; }
@@ -27,11 +27,11 @@
 .tradenote-day.is-past-empty { background: color-mix(in srgb, var(--background-modifier-error) 10%, var(--background-secondary)); border-color: color-mix(in srgb, var(--background-modifier-error) 42%, var(--background-modifier-border)); color: var(--text-muted); }
 .tradenote-day.is-future { background: var(--background-secondary); border-color: var(--background-modifier-border); color: var(--text-faint); cursor: default; opacity: 0.58; }
 .tradenote-day.is-future:hover { background: color-mix(in srgb, var(--background-secondary) 75%, transparent); border-color: var(--background-modifier-border); color: var(--text-faint); }
-.tradenote-day.is-non-trading, .tradenote-day.is-non-trading.has-review { background: transparent; border-color: transparent; color: var(--text-faint); cursor: default; opacity: 0.5; }
-.tradenote-day.is-non-trading:hover, .tradenote-day.is-non-trading.has-review:hover { background: transparent; border-color: transparent; color: var(--text-faint); }
+.tradenote-day.is-non-trading:not(.has-review):not(.is-future) { background: transparent; border-color: transparent; color: var(--text-faint); cursor: pointer; opacity: 0.7; }
+.tradenote-day.is-non-trading:not(.has-review):not(.is-future):hover { background: var(--background-secondary); border-color: var(--background-modifier-border-hover); color: var(--text-muted); opacity: 1; }
 .tradenote-day-meter { display: flex; gap: 2px; }
 .tradenote-day-meter span { background: var(--background-modifier-border); border-radius: 1px; flex: 1; height: 3px; }
-.tradenote-day-meter span.is-filled:nth-child(1) { background: var(--stock-observation); }.tradenote-day-meter span.is-filled:nth-child(2) { background: var(--stock-validation); }.tradenote-day-meter span.is-filled:nth-child(3) { background: var(--stock-action); }.tradenote-day-meter span.is-filled:nth-child(4) { background: var(--stock-reflection); }.tradenote-day-meter span.is-filled:nth-child(5) { background: var(--stock-plan); }
+.tradenote-day-meter span.is-filled:nth-child(1) { background: var(--stock-observation); }.tradenote-day-meter span.is-filled:nth-child(2) { background: var(--stock-us-market); }.tradenote-day-meter span.is-filled:nth-child(3) { background: var(--stock-validation); }.tradenote-day-meter span.is-filled:nth-child(4) { background: var(--stock-action); }.tradenote-day-meter span.is-filled:nth-child(5) { background: var(--stock-reflection); }.tradenote-day-meter span.is-filled:nth-child(6) { background: var(--stock-plan); }
 .tradenote-action-status { color: var(--text-muted); font-size: var(--font-ui-smaller); line-height: 1.5; margin: 0 0 12px; }
 .tradenote-section-progress { border-bottom: 1px solid var(--background-modifier-border); border-top: 1px solid var(--background-modifier-border); margin-bottom: 15px; }
 .tradenote-section-progress-row { align-items: center; background: transparent; border: 0; border-left: 2px solid transparent; border-radius: 0; box-shadow: none; color: var(--text-muted); display: flex; font-size: var(--font-ui-smaller); gap: 8px; padding: 8px 7px; text-align: left; width: 100%; }
@@ -39,7 +39,7 @@
 .tradenote-section-progress-row:hover { background: var(--background-secondary); color: var(--text-normal); }
 .tradenote-section-progress-row svg { height: 13px; width: 13px; }
 .tradenote-section-progress-row.is-filled { color: var(--text-normal); }
-.tradenote-section-progress-row.is-filled { background: color-mix(in srgb, var(--interactive-accent) 9%, transparent); color: var(--text-normal); }.tradenote-section-progress-row.is-filled svg { color: var(--text-accent); }.tradenote-section-1.is-filled, .tradenote-section-2.is-filled, .tradenote-section-3.is-filled, .tradenote-section-4.is-filled, .tradenote-section-5.is-filled { border-left-color: var(--interactive-accent); }
+.tradenote-section-progress-row.is-filled { background: color-mix(in srgb, var(--interactive-accent) 9%, transparent); color: var(--text-normal); }.tradenote-section-progress-row.is-filled svg { color: var(--text-accent); }.tradenote-section-1.is-filled, .tradenote-section-2.is-filled, .tradenote-section-3.is-filled, .tradenote-section-4.is-filled, .tradenote-section-5.is-filled, .tradenote-section-6.is-filled { border-left-color: var(--interactive-accent); }
 .tradenote-daily-actions { display: grid; gap: 7px; margin-bottom: 14px; }
 .tradenote-daily-action { align-self: stretch; background: var(--interactive-accent); border-color: var(--interactive-accent); box-shadow: none; color: var(--text-on-accent); font-weight: var(--font-semibold); }
 .tradenote-previous-action { background: transparent; border: 1px solid var(--background-modifier-border); border-radius: 4px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); padding: 6px 9px; }
@@ -101,3 +101,114 @@
 .tradenote-analysis-output { min-height: 340px; margin-top: 12px; }
 
 .tradenote-calendar-source { display: block; }
+
+.tradenote-tag-select { max-width: 128px; min-height: 30px; }
+.tradenote-tag-new { color: var(--text-faint); font-size: var(--font-ui-smaller); margin-left: 6px; }
+.tradenote-tag-control { flex-wrap: wrap; }
+.tradenote-tag-list { display: flex; flex-basis: 100%; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin-top: 6px; }
+.tradenote-tag-chip { align-items: center; background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 12px; display: inline-flex; font-size: var(--font-ui-smaller); gap: 3px; padding: 2px 7px; }
+.tradenote-tag-remove { background: transparent; border: 0; box-shadow: none; color: var(--text-muted); cursor: pointer; height: 18px; padding: 0; width: 18px; }
+.tradenote-tag-remove:hover { color: var(--text-error); }
+@media (max-width: 640px) { .tradenote-tag-select { max-width: 96px; } }
+
+.tradenote-quick-input { box-sizing: border-box; min-height: 180px; resize: vertical; width: 100%; }
+.tradenote-quick-tags { margin-top: 12px; }
+.tradenote-quick-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tradenote-quick-tag { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 12px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); padding: 2px 9px; }
+.tradenote-quick-tag:hover { color: var(--text-normal); }
+.tradenote-quick-tag.is-active { background: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
+.tradenote-quick-tag-row { margin-top: 8px; }
+.tradenote-quick-tag-row input { width: 100%; }
+.tradenote-quicknotes { border-top: 1px solid var(--background-modifier-border); margin-top: 28px; padding-top: 20px; }
+.tradenote-quicknotes-header { align-items: center; display: flex; justify-content: space-between; }
+.tradenote-quicknotes-header h3 { font-size: 16px; }
+.tradenote-quicknotes-header > div > span { color: var(--text-muted); display: block; font-size: var(--font-ui-smaller); margin-top: 3px; }
+.tradenote-quick-add { background: var(--interactive-accent); border-color: var(--interactive-accent); box-shadow: none; color: var(--text-on-accent); font-weight: var(--font-semibold); }
+.tradenote-quicknotes-controls { align-items: center; display: flex; gap: 8px; margin: 14px 0; }
+.tradenote-quick-search { flex: 1; min-width: 0; }
+.tradenote-quick-row { border-top: 1px solid var(--background-modifier-border); display: grid; gap: 12px; grid-template-columns: 140px minmax(0, 1fr); padding: 10px 8px; }
+.tradenote-quick-row:last-child { border-bottom: 1px solid var(--background-modifier-border); }
+.tradenote-quick-date { align-self: start; background: transparent; border: 1px solid transparent; border-radius: 3px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); padding: 4px 6px; text-align: left; white-space: nowrap; }
+.tradenote-quick-date:hover { background: var(--background-secondary); color: var(--text-normal); }
+.tradenote-quick-body { min-width: 0; }
+.tradenote-quick-text { color: var(--text-normal); display: block; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tradenote-quick-tags-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.tradenote-quick-tag-label { color: var(--text-accent); font-size: var(--font-ui-smaller); }
+@media (max-width: 640px) { .tradenote-quicknotes-controls { flex-wrap: wrap; } .tradenote-quick-row { grid-template-columns: 1fr; } }
+
+.tradenote-muted { color: var(--text-muted); }
+.tradenote-events-container .view-content { padding: 0; }
+.tradenote-events { height: 100%; overflow: auto; }
+.tradenote-events-inner { box-sizing: border-box; margin: 0 auto; max-width: 980px; padding: 26px 34px 56px; }
+.tradenote-events-header { align-items: flex-start; display: flex; justify-content: space-between; margin-bottom: 22px; }
+.tradenote-events-header h2 { font-size: 24px; letter-spacing: -0.01em; margin: 0; }
+.tradenote-events-header > div > span { display: block; font-size: var(--font-ui-smaller); margin-top: 4px; }
+.tradenote-events-group { margin-bottom: 26px; }
+.tradenote-events-group-title { align-items: baseline; display: flex; gap: 8px; margin-bottom: 10px; }
+.tradenote-events-group-title h3 { font-size: 15px; letter-spacing: 0.02em; margin: 0; }
+.tradenote-events-group-title span { font-size: 11px; }
+.tradenote-events-summary { color: var(--text-muted); cursor: pointer; font-size: var(--font-ui-smaller); margin-bottom: 10px; }
+.tradenote-event { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-left: 3px solid var(--background-modifier-border); border-radius: 8px; margin-bottom: 10px; padding: 14px 16px; transition: border-color 120ms ease, background-color 120ms ease; }
+.tradenote-event:hover { border-color: var(--background-modifier-border-hover); }
+.tradenote-event-countdown-card { display: grid; gap: 18px; grid-template-columns: 156px minmax(0, 1fr); }
+.tradenote-event-count { border-right: 1px solid var(--background-modifier-border); display: flex; flex-direction: column; gap: 12px; justify-content: center; padding-right: 18px; }
+.tradenote-event-count-item { display: flex; flex-direction: column; gap: 2px; }
+.tradenote-event-count-number { color: var(--text-accent); font-size: 30px; font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.tradenote-event-count-number.is-text { font-size: 24px; }
+.tradenote-event-count-label { color: var(--text-muted); font-size: 11px; letter-spacing: 0.02em; }
+.tradenote-event.is-past .tradenote-event-count-number { color: var(--text-muted); }
+.tradenote-event.is-today { border-color: var(--interactive-accent); border-left-color: var(--interactive-accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 25%, transparent); }
+.tradenote-event-countdown-card:not(.is-past) { border-left-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border)); }
+.tradenote-event.is-past { opacity: 0.78; }
+.tradenote-event-content { min-width: 0; }
+.tradenote-event-main { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; min-width: 0; }
+.tradenote-events button.tradenote-event-title { appearance: none; background: transparent; border: 0; border-radius: 3px; box-shadow: none; color: var(--text-normal); font-size: 17px; font-weight: var(--font-semibold); height: auto; line-height: 1.35; min-height: 0; padding: 0; text-align: left; }
+.tradenote-events button.tradenote-event-title:hover { color: var(--text-accent); }
+.tradenote-events button.tradenote-event-title:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; }
+.tradenote-event-meta { align-items: center; color: var(--text-muted); display: flex; flex-wrap: wrap; font-size: var(--font-ui-smaller); gap: 10px; margin-top: 4px; }
+.tradenote-events button.tradenote-event-edit { background: transparent; border: 0; border-radius: 4px; box-shadow: none; color: var(--text-faint); font-size: var(--font-ui-smaller); height: auto; min-height: 0; padding: 2px 7px; }
+.tradenote-events button.tradenote-event-edit:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.tradenote-event-texts { display: grid; gap: 5px; margin-top: 10px; }
+.tradenote-event-text { color: var(--text-muted); display: flex; font-size: var(--font-ui-smaller); gap: 8px; line-height: 1.5; min-width: 0; }
+.tradenote-event-text-label { color: var(--text-faint); flex: 0 0 auto; min-width: 4em; }
+.tradenote-event-text-value { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.tradenote-event-text-value.is-empty { color: var(--text-faint); }
+.tradenote-event-form { display: grid; gap: 6px; }
+.tradenote-event-form label { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-top: 6px; }
+.tradenote-event-input { min-height: 90px; resize: vertical; width: 100%; }
+@media (max-width: 640px) { .tradenote-events-inner { padding: 16px; } .tradenote-events-header { flex-direction: column; gap: 10px; } .tradenote-event-main { flex-direction: column; gap: 4px; } .tradenote-event-countdown-card { grid-template-columns: 1fr; } .tradenote-event-count { border-bottom: 1px solid var(--background-modifier-border); border-right: 0; flex-direction: row; gap: 24px; justify-content: flex-start; padding: 0 0 12px; } }
+
+.tradenote-events-header-actions { align-items: center; display: flex; gap: 8px; }
+.tradenote-events-header-actions button:not(.mod-cta) { background: transparent; border: 1px solid var(--background-modifier-border); border-radius: 4px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); padding: 4px 10px; }
+.tradenote-events-header-actions button:not(.mod-cta):hover { background: var(--background-secondary); color: var(--text-normal); }
+.tradenote-events-header-actions .mod-cta { border-radius: 4px; box-shadow: none; font-size: var(--font-ui-smaller); padding: 4px 12px; }
+.tradenote-event-controls { align-items: center; display: flex; gap: 8px; margin-bottom: 16px; }
+.tradenote-event-driven-search { flex: 1; min-width: 0; }
+.tradenote-event-status { border-radius: 10px; font-size: var(--font-ui-smaller); padding: 2px 8px; white-space: nowrap; }
+.tradenote-event-status.is-pending { background: color-mix(in srgb, var(--interactive-accent) 18%, transparent); color: var(--text-accent); }
+.tradenote-event-status.is-done { background: var(--background-modifier-border); color: var(--text-muted); }
+.tradenote-event-driven.is-pending { border-left: 3px solid var(--interactive-accent); }
+.tradenote-event-driven-form .tradenote-event-input { min-height: 70px; }
+@media (max-width: 640px) { .tradenote-events-header-actions { flex-wrap: wrap; } .tradenote-event-controls { flex-wrap: wrap; } }
+
+.tradenote-countdown-panel { border-bottom: 1px solid var(--background-modifier-border); margin-bottom: 18px; padding-bottom: 10px; }
+.tradenote-countdown-header { align-items: center; display: flex; justify-content: space-between; margin-bottom: 4px; }
+.tradenote-countdown-header h3 { font-size: 16px; margin: 0; }
+.tradenote-countdown-header > div > span { display: block; font-size: var(--font-ui-smaller); margin-top: 3px; }
+.tradenote-countdown-actions { align-items: center; display: flex; gap: 4px; }
+.tradenote-dashboard button.tradenote-countdown-view-all { background: transparent; border: 1px solid var(--background-modifier-border); border-radius: 4px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); height: auto; min-height: 0; padding: 3px 8px; }
+.tradenote-dashboard button.tradenote-countdown-view-all:hover { background: var(--background-secondary); color: var(--text-normal); }
+.tradenote-countdown-list { display: flex; flex-direction: column; gap: 1px; }
+.tradenote-dashboard button.tradenote-countdown-row { background: transparent; border: 0; border-radius: 4px; box-shadow: none; display: grid; gap: 12px; grid-template-columns: minmax(82px, auto) minmax(0, 1fr) auto; height: auto; min-height: 0; padding: 8px 6px; text-align: left; width: 100%; }
+.tradenote-dashboard button.tradenote-countdown-row:hover { background: var(--background-secondary); }
+.tradenote-dashboard button.tradenote-countdown-row.is-today { background: color-mix(in srgb, var(--interactive-accent) 7%, transparent); }
+.tradenote-countdown-date { color: var(--text-muted); font-size: var(--font-ui-smaller); white-space: nowrap; }
+.tradenote-countdown-title { color: var(--text-normal); font-size: 15px; font-weight: var(--font-semibold); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tradenote-countdown-count { align-items: flex-end; display: flex; flex-direction: column; gap: 1px; }
+.tradenote-countdown-stat { color: var(--text-muted); font-size: 11px; line-height: 1.25; white-space: nowrap; }
+.tradenote-countdown-stat strong { color: var(--text-accent); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tradenote-countdown-today { color: var(--text-accent); font-size: 15px; font-weight: 600; }
+.tradenote-dashboard button.tradenote-countdown-more { background: transparent; border: 0; border-radius: 4px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); height: auto; min-height: 0; margin-top: 2px; padding: 4px 6px; width: 100%; }
+.tradenote-dashboard button.tradenote-countdown-more:hover { background: var(--background-secondary); color: var(--text-normal); }
+.tradenote-countdown-empty { padding: 12px 0; text-align: left; }
+@media (max-width: 640px) { .tradenote-dashboard button.tradenote-countdown-row { gap: 8px; grid-template-columns: minmax(70px, auto) minmax(0, 1fr) auto; } .tradenote-countdown-stat { font-size: 10px; } .tradenote-countdown-stat strong { font-size: 15px; } }

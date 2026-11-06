@@ -22,15 +22,15 @@ class MockSetting {
   addDropdown(fn) { return this.control(fn); }
 }
 let request = async () => { throw new Error('Unexpected network request'); };
-const obsidian = { App: class {}, ItemView: class {}, MarkdownView: class {}, Modal: class {}, Notice: class { constructor(message) { notices.push(message); } }, Plugin: class {}, PluginSettingTab: class {}, Setting: MockSetting, requireApiVersion: () => supportsDeclarative, TFile, TFolder, normalizePath: s => s.replace(/\\/g, '/'), requestUrl: (...args) => request(...args), setIcon() {} };
+const obsidian = { App: class {}, ItemView: class {}, MarkdownView: class {}, Modal: class {}, Notice: class { constructor(message) { notices.push(message); } }, Plugin: class {}, PluginSettingTab: class {}, Setting: MockSetting, SuggestModal: class { constructor() {} setPlaceholder() {} }, requireApiVersion: () => supportsDeclarative, TFile, TFolder, normalizePath: s => s.replace(/\\/g, '/'), requestUrl: (...args) => request(...args), setIcon() {} };
 const modules = {};
-for (const name of ['market-calendar', 'review-analysis']) {
-  const moduleContext = { exports: {} };
+for (const name of ['market-calendar', 'review-analysis', 'review-tags', 'quick-notes', 'markdown-sections', 'events']) {
+  const moduleContext = { exports: {}, require: specifier => modules[specifier] };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(`src/${name}.ts`, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, moduleContext);
   modules[`./${name}`] = moduleContext.exports;
 }
 const context = { exports: {}, require: name => name === 'obsidian' ? obsidian : modules[name], console, Date, Map, Set, URL, URLSearchParams, window: { setTimeout, clearTimeout, setInterval: () => 0 } };
-const source = fs.readFileSync('src/main.ts', 'utf8') + '\nObject.assign(exports, { loadReviewSettings, StockReviewSettingTab, sectionText, marketDateFor, StockReviewDashboardView });';
+const source = fs.readFileSync('src/main.ts', 'utf8') + '\nObject.assign(exports, { loadReviewSettings, StockReviewSettingTab, sectionText, StockReviewDashboardView });';
 vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, context);
 const api = context.exports;
 async function main() {
@@ -46,6 +46,22 @@ async function main() {
   assert.equal(restored.aiApiKey, "saved-key"); assert.equal(restored.calendarYears['2027'].length, 3);
   restored.calendarYears['2027'].push('2027-01-04');
   assert.equal(Object.keys(api.loadReviewSettings(null).calendarYears).length, 0);
+  assert.equal(invalid.reviewTags.length, 0);
+  assert.equal(defaults.quickFolder, '随手记');
+  assert.equal(defaults.includeQuickNotesInAi, false);
+  const quickSettings = api.loadReviewSettings({ quickFolder: ' 灵感 ', includeQuickNotesInAi: true });
+  assert.equal(quickSettings.quickFolder, '灵感');
+  assert.equal(quickSettings.includeQuickNotesInAi, true);
+  assert.equal(defaults.eventFolder, '大事');
+  const eventSettings = api.loadReviewSettings({ eventFolder: ' 事件 ' });
+  assert.equal(eventSettings.eventFolder, '事件');
+  assert.equal(defaults.eventDrivenFolder, '事件驱动');
+  const drivenSettings = api.loadReviewSettings({ eventDrivenFolder: ' 盘后 ' });
+  assert.equal(drivenSettings.eventDrivenFolder, '盘后');
+  const tagged = api.loadReviewSettings({ reviewTags: ['#救市政策', '救市政策', '来源/北漠海', 42, '含 空格'] });
+  assert.equal(tagged.reviewTags.join(','), '救市政策,来源/北漠海');
+  tagged.reviewTags.push('临时');
+  assert.equal(api.loadReviewSettings(null).reviewTags.length, 0);
   const settingsPlugin = new api.default(); settingsPlugin.settings = api.loadReviewSettings(null);
   let settingSaves = 0; settingsPlugin.saveSettings = async () => { settingSaves++; };
   const tab = new api.StockReviewSettingTab({}, settingsPlugin);
@@ -76,25 +92,129 @@ async function main() {
   editorHandlers['editor-paste']({ defaultPrevented: false, clipboardData: { files: [{ type: 'image/png', name: 'test.png' }] }, preventDefault() { prevented++; } }, {}, editorInfo);
   assert.equal(pasted, 1); assert.equal(prevented, 1);
 
-  const markdown = '# 市场观察\n\n第一行\n第二行\n\n```md\n# 代码内标题\n```\n\n# 今日操作\n\n买入\n';
-  assert.match(api.sectionText(markdown, '市场观察'), /第一行\n第二行/);
-  assert.match(api.sectionText(markdown, '市场观察'), /代码内标题/);
+  const markdown = '# A股市场\n\n第一行\n第二行\n\n```md\n# 代码内标题\n```\n\n# 今日操作\n\n买入\n';
+  assert.match(api.sectionText(markdown, 'A股市场'), /第一行\n第二行/);
+  assert.match(api.sectionText(markdown, 'A股市场'), /代码内标题/);
   assert.equal(api.sectionText(markdown, '今日操作'), '买入');
-  assert.equal(api.sectionText('# 市场观察\n\n# 今日操作\n正文', '市场观察'), '');
+  assert.equal(api.sectionText('# A股市场\n\n# 今日操作\n正文', 'A股市场'), '');
   assert.equal(api.sectionText('## 明日计划\r\n\r\n计划一\r\n计划二', '明日计划'), '计划一\n计划二');
-  assert.equal(api.marketDateFor(new Date('2026-10-08T14:59:00')), '2026-09-30');
-  assert.equal(api.marketDateFor(new Date('2026-10-08T15:00:00')), '2026-10-08');
-  assert.equal(api.marketDateFor(new Date('2026-10-04T16:00:00')), '2026-09-30');
+  const tagApi = modules['./review-tags'];
+  assert.equal(tagApi.extractTags('# A股市场\n降准 #救市政策 #来源/北漠海').join(','), '救市政策,来源/北漠海');
+  assert.equal(tagApi.extractTags('```\n#代码标签\n```\n正文 #保留').join(','), '保留');
+  assert.equal(tagApi.extractTags('`#行内` #正常').join(','), '正常');
+  assert.equal(tagApi.extractTags('https://example.com/#anchor #有效').join(','), '有效');
+  assert.equal(tagApi.extractTags('#123 #正常').join(','), '正常');
+  assert.equal(tagApi.normalizeTag('  #救市政策 '), '救市政策');
+  assert.equal(tagApi.normalizeTag('含 空格'), '');
+  const insertionLines = ['# A股市场', '', '第一行', '第二行 #已有', '', '独立段落'];
+  const insertion = tagApi.planTagInsertion(insertionLines, 2, '救市政策');
+  assert.equal(insertion.line, 3); assert.equal(insertion.text, ' #救市政策');
+  assert.equal(tagApi.planTagInsertion(insertionLines, 3, '已有').duplicate, true);
+  assert.match(tagApi.planTagInsertion(['# 标题'], 0, '标签').error, /标题/);
+  assert.match(tagApi.planTagInsertion(['```', '#代码', '```'], 1, '标签').error, /代码/);
+  assert.match(tagApi.planTagInsertion(['正文'], 0, '含 空格').error, /有效/);
+  const quickApi = modules['./quick-notes'];
+  const formattedQuick = quickApi.formatQuickNoteBlock('14:32', '央行降准', ['#救市政策', '来源/北漠海']);
+  assert.match(formattedQuick, /^## 14:32/);
+  assert.match(formattedQuick, /#救市政策 #来源\/北漠海/);
+  const quickMarkdown = '# 2026-11-06 随手记\n\n## 14:32\n\n内容A\n\n#救市政策\n\n## 21:05\n\n内容B';
+  const parsedQuick = quickApi.parseQuickNotes('2026-11-06', quickMarkdown);
+  assert.equal(parsedQuick.length, 2);
+  assert.equal(parsedQuick[0].time, '14:32');
+  assert.equal(parsedQuick[0].tags.join(','), '救市政策');
+  assert.equal(parsedQuick[1].text, '内容B');
+  assert.equal(quickApi.quickNoteBody('内容\n\n#救市政策'), '内容');
+  const appendedQuick = quickApi.appendQuickNote('', '2026-11-06', '14:32', '内容', ['救市政策']);
+  assert.match(appendedQuick, /^# 2026-11-06 随手记/);
+  assert.match(appendedQuick, /## 14:32/);
+  const eventApi = modules['./events'];
+  const eventTemplate = eventApi.eventTemplate('美联储议息', '2026-12-10');
+  assert.match(eventTemplate, /date: "2026-12-10"/);
+  assert.match(eventTemplate, /# 美联储议息/);
+  let updatedEvent = eventApi.updateEventNote(eventTemplate, '美联储议息', '2026-12-10', '预期降息', '实际维持不变');
+  assert.match(updatedEvent, /## 预期\n\n预期降息/);
+  assert.match(updatedEvent, /## 实际\n\n实际维持不变/);
+  const parsedEvent = eventApi.parseEventNote(updatedEvent, 'fallback');
+  assert.equal(parsedEvent.title, '美联储议息');
+  assert.equal(parsedEvent.date, '2026-12-10');
+  updatedEvent = eventApi.updateEventNote(updatedEvent, '美联储议息', '2026-12-10', '修改后的预期', '实际维持不变');
+  assert.match(updatedEvent, /修改后的预期/);
+  assert.doesNotMatch(updatedEvent, /预期降息/);
+  assert.match(updatedEvent, /## 实际/);
+  assert.equal(eventApi.naturalDaysBetween('2026-11-06', '2026-12-10'), 34);
+  const weekday = date => ![0, 6].includes(new Date(`${date}T12:00:00Z`).getUTCDay());
+  assert.equal(eventApi.tradingDaysBetween('2026-11-06', '2026-11-09', weekday), 1);
+  const countdown = eventApi.eventCountdown('2026-11-09', '2026-11-06', weekday);
+  assert.equal(countdown.days, 3); assert.equal(countdown.tradingDays, 1);
+  assert.match(countdown.label, /还有 3 个自然日 · 1 个A股交易日/);
+  const pastCountdown = eventApi.eventCountdown('2026-11-05', '2026-11-06', weekday);
+  assert.equal(pastCountdown.days, -1); assert.equal(pastCountdown.tradingDays, -1);
+  assert.match(pastCountdown.label, /已发生 1 个自然日 · 1 个A股交易日/);
+  assert.equal(eventApi.eventWeekday('2026-11-06'), '周五');
+  assert.equal(eventApi.eventWeekday('2026-11-09'), '周一');
+  assert.equal(eventApi.eventSlug('美联储：议息/会议?'), '美联储：议息会议');
+  const drivenData = { title: '央行降准公告', date: '2026-11-06', time: '20:00', event: '盘后宣布降准', expectation: '预期降准 0.25 个百分点', result: '', reaction: '' };
+  let drivenNote = eventApi.eventDrivenTemplate(drivenData.title, drivenData.date, drivenData.time);
+  assert.match(drivenNote, /date: "2026-11-06"/);
+  assert.match(drivenNote, /time: "20:00"/);
+  const parsedDriven = eventApi.parseEventMeta(drivenNote, 'fallback');
+  assert.equal(parsedDriven.date, '2026-11-06'); assert.equal(parsedDriven.time, '20:00');
+  drivenNote = eventApi.updateEventDrivenNote(drivenNote, drivenData);
+  assert.match(drivenNote, /## 事件\n\n盘后宣布降准/);
+  assert.match(drivenNote, /## 预期\n\n预期降准 0.25 个百分点/);
+  assert.match(drivenNote, /## 结果\n\n## 次日反应/);
+  assert.equal(eventApi.eventDrivenStatus(''), 'pending');
+  assert.equal(eventApi.eventDrivenStatus('结果'), 'done');
+  const doneData = { ...drivenData, result: '实际降准 0.25 个百分点', reaction: '次日高开' };
+  drivenNote = eventApi.updateEventDrivenNote(drivenNote, doneData);
+  assert.match(drivenNote, /实际降准 0.25 个百分点/);
+  assert.match(drivenNote, /次日高开/);
+  const drivenSections = eventApi.eventDrivenSections(drivenNote);
+  assert.equal(drivenSections.event, '盘后宣布降准');
+  assert.equal(drivenSections.result, '实际降准 0.25 个百分点');
+  const withNote = drivenNote.replace('## 次日反应', '## 备注\n\n手工补充\n\n## 次日反应');
+  assert.match(eventApi.updateEventDrivenNote(withNote, doneData), /手工补充/);
+  const noTime = eventApi.updateEventDrivenNote(drivenNote, { ...doneData, time: '' });
+  assert.doesNotMatch(noTime, /^time:/m);
   const dashboard = new api.StockReviewDashboardView();
-  dashboard.quickFilter = 'all'; dashboard.sectionFilter = '市场观察'; dashboard.query = '';
-  const entry = { date: '2026-10-15', sections: { 市场观察: '' }, text: '' };
+  dashboard.quickFilter = 'all'; dashboard.sectionFilter = 'A股市场'; dashboard.query = '';
+  const entry = { date: '2026-10-15', sections: { 'A股市场': '' }, text: '' };
   dashboard.sectionPresence = 'written'; assert.equal(dashboard.matchesFilters(entry), false);
   dashboard.sectionPresence = 'missing'; assert.equal(dashboard.matchesFilters(entry), true);
+  const taggedEntry = { date: '2026-10-15', sections: { 'A股市场': '降准 #救市政策', '美股市场': '' }, text: '降准 #救市政策' };
+  dashboard.sectionPresence = 'written'; dashboard.tagFilter = '救市政策';
+  assert.equal(dashboard.matchesFilters(taggedEntry), true);
+  dashboard.sectionFilter = '美股市场'; assert.equal(dashboard.matchesFilters(taggedEntry), false);
+  dashboard.sectionFilter = 'A股市场'; dashboard.tagFilter = '';
+  const quickDashboard = new api.StockReviewDashboardView();
+  quickDashboard.quickRange = 'all'; quickDashboard.quickQuery = ''; quickDashboard.quickTagFilter = '救市政策';
+  const quickNoteEntry = { date: '2026-11-06', time: '14:32', text: '内容 #救市政策', tags: ['救市政策'] };
+  assert.equal(quickDashboard.matchesQuickNote(quickNoteEntry), true);
+  quickDashboard.quickTagFilter = ''; quickDashboard.quickQuery = '政策';
+  assert.equal(quickDashboard.matchesQuickNote(quickNoteEntry), true);
+  quickDashboard.quickQuery = '不存在'; assert.equal(quickDashboard.matchesQuickNote(quickNoteEntry), false);
   const plugin = new api.default();
   const oldFile = Object.assign(new TFile(), { path: '交易复盘/日报/2026-10-16.md', name: '2026-10-16.md', basename: '2026-10-16' });
   plugin.app = { vault: { getAbstractFileByPath: () => null, getMarkdownFiles: () => [oldFile] } };
   plugin.settings = { rootFolder: '交易复盘', dailyFolder: '日报' };
   assert.equal(await plugin.getOrCreateDaily('2026-10-16'), oldFile);
+  const weekendPlugin = new api.default();
+  weekendPlugin.settings = { rootFolder: '交易复盘', dailyFolder: '日报' };
+  const createdPaths = [];
+  weekendPlugin.app = { vault: {
+    getAbstractFileByPath: () => null,
+    getMarkdownFiles: () => [],
+    createFolder: async () => {},
+    create: async (path) => {
+      createdPaths.push(path);
+      const name = path.split('/').pop();
+      return Object.assign(new TFile(), { path, name, basename: name.replace(/\.md$/, ''), extension: 'md' });
+    }
+  } };
+  const weekendFile = await weekendPlugin.getOrCreateDaily('2026-10-17');
+  assert.equal(weekendFile.path, '交易复盘/日报/2026/10/20261017复盘.md');
+  assert.deepEqual(createdPaths, ['交易复盘/日报/2026/10/20261017复盘.md']);
+  await assert.rejects(weekendPlugin.getOrCreateDaily('2999-01-01'), /未来/);
   const ai = new api.default(); ai.settings = { aiBaseUrl: 'https://example.com', aiApiKey: 'test', aiModel: 'test' };
   request = async () => ({ json: {} }); await assert.rejects(ai.testAi(), /有效消息/);
   await assert.rejects(plugin.getOrCreateDaily('2026-02-30'), /无效/);
@@ -143,18 +263,43 @@ async function main() {
   assert.doesNotMatch(analysis.plainReviewText('内容 ![[a.png]] ![x](https://example.com/a.png) <img src="b.png">'), /a.png|b.png|https:/);
   const reviewer = new api.default(); reviewer.settings = ai.settings;
   reviewer.getReviewEntries = async () => [
-    { date: '2026-10-19', text: '# 市场观察\n复盘事实 ![[private.png]]' },
+    { date: '2026-10-19', text: '# A股市场\n复盘事实 ![[private.png]]' },
     { date: '2026-10-20', text: '# 今日反思\n反思记录' },
     { date: '2026-10-23', text: 'FUTURE_SHOULD_NOT_SEND' },
-    { date: '2026-10-18', text: 'WEEKEND_SHOULD_NOT_SEND' }
+    { date: '2026-10-18', text: 'OUT_OF_RANGE_SHOULD_NOT_SEND' }
   ];
   let sent;
   request = async options => { sent = JSON.parse(options.body); return { json: { choices: [{ message: { content: '文字分析 ![bad](https://example.com/b.png)' } }] } }; };
   const report = await reviewer.analyzeReview('2026-10-22', 'weekly');
   assert.equal(typeof sent.messages[0].content, 'string');
   assert.match(sent.messages[0].content, /复盘事实/);
-  assert.doesNotMatch(sent.messages[0].content, /private.png|FUTURE_SHOULD_NOT_SEND|WEEKEND_SHOULD_NOT_SEND/);
+  assert.doesNotMatch(sent.messages[0].content, /private.png|FUTURE_SHOULD_NOT_SEND|OUT_OF_RANGE_SHOULD_NOT_SEND/);
   assert.doesNotMatch(report, /b.png/);
+  reviewer.getReviewEntries = async () => [
+    { date: '2026-10-24', text: 'WEEKEND_POLICY_SHOULD_SEND' },
+    { date: '2026-10-25', text: 'SUNDAY_INSIGHT_SHOULD_SEND' }
+  ];
+  const weekendDaily = await reviewer.analyzeReview('2026-10-24', 'daily');
+  assert.match(sent.messages[0].content, /WEEKEND_POLICY_SHOULD_SEND/);
+  assert.doesNotMatch(sent.messages[0].content, /SUNDAY_INSIGHT_SHOULD_SEND/);
+  assert.match(weekendDaily, /文字复盘 1 篇/);
+  const weekendWeekly = await reviewer.analyzeReview('2026-10-25', 'weekly');
+  assert.match(sent.messages[0].content, /WEEKEND_POLICY_SHOULD_SEND/);
+  assert.match(sent.messages[0].content, /SUNDAY_INSIGHT_SHOULD_SEND/);
+  assert.match(weekendWeekly, /文字复盘 2 篇/);
+  const quickReviewer = new api.default();
+  quickReviewer.settings = api.loadReviewSettings({ aiBaseUrl: 'https://example.com', aiApiKey: 'quick-fixture', aiModel: 'quick-model', includeQuickNotesInAi: true });
+  quickReviewer.getReviewEntries = async () => [{ date: '2026-10-22', text: '# A股市场\n复盘正文' }];
+  quickReviewer.getQuickNotes = async () => [{ date: '2026-10-22', time: '09:30', text: '随手心得 QUICK_NOTE_SHOULD_SEND', tags: [] }];
+  const quickReport = await quickReviewer.analyzeReview('2026-10-22', 'daily');
+  assert.match(sent.messages[0].content, /QUICK_NOTE_SHOULD_SEND/);
+  assert.match(sent.messages[0].content, /随手记/);
+  assert.match(quickReport, /随手记 1 条/);
+  quickReviewer.getReviewEntries = async () => [];
+  await quickReviewer.analyzeReview('2026-10-22', 'daily');
+  assert.match(sent.messages[0].content, /QUICK_NOTE_SHOULD_SEND/);
+  quickReviewer.settings.includeQuickNotesInAi = false;
+  await assert.rejects(quickReviewer.analyzeReview('2026-10-22', 'daily'), /没有可分析/);
   reviewer.getReviewEntries = async () => [];
   await assert.rejects(reviewer.analyzeReview('2026-10-22', 'daily'), /没有可分析/);
   const modelPlugin = new api.default(); modelPlugin.settings = api.loadReviewSettings({ aiBaseUrl: 'https://a.example/chat/completions', aiApiKey: 'fixture', aiModel: 'manual-model' });
@@ -172,7 +317,7 @@ async function main() {
   console.log('PASS: model-list response races, stale selections and fetch-button recovery');
   const reader = new api.default(); reader.settings = api.loadReviewSettings(null);
   const reviewFile = { path: '交易复盘/日报/2026/10/20261028复盘.md', name: '20261028复盘.md', basename: '20261028复盘', extension: 'md' };
-  let reviewText = '# 市场观察\n原文\n# 今日反思\n反思', cachedReads = 0;
+  let reviewText = '# A股市场\n原文\n# 今日反思\n反思 #救市政策', cachedReads = 0;
   reader.app = { vault: {
     getMarkdownFiles: () => [reviewFile],
     getFiles: () => [reviewFile, { path: '交易复盘/附件/2026/10/28/image.png', extension: 'png' }],
@@ -181,9 +326,39 @@ async function main() {
   } };
   let entries = await reader.getReviewEntries();
   assert.equal(entries[0].date, '2026-10-28'); assert.equal(entries[0].filledCount, 2); assert.equal(entries[0].attachmentCount, 1);
-  reviewText = '# 市场观察\n编辑后的正文'; entries = await reader.getReviewEntries();
+  assert.equal(entries[0].tags.join(','), '救市政策');
+  reviewText = '# A股市场\n编辑后的正文'; entries = await reader.getReviewEntries();
   assert.match(entries[0].text, /编辑后的正文/); assert.equal(entries[0].filledCount, 1); assert.equal(cachedReads, 2);
   console.log('PASS: dashboard cached reads retain date parsing, sections, attachments and edited content');
+  const quickReader = new api.default(); quickReader.settings = api.loadReviewSettings(null);
+  const quickFile = { path: '交易复盘/随手记/2026/11/2026-11-06.md', name: '2026-11-06.md', basename: '2026-11-06', extension: 'md' };
+  quickReader.app = { vault: { getMarkdownFiles: () => [quickFile], cachedRead: async () => quickMarkdown } };
+  const loadedQuick = await quickReader.getQuickNotes();
+  assert.equal(loadedQuick.length, 2);
+  assert.equal(loadedQuick[0].time, '21:05');
+  assert.equal(loadedQuick[1].tags.join(','), '救市政策');
+  assert.equal(loadedQuick[0].file, quickFile);
+  const eventReader = new api.default(); eventReader.settings = api.loadReviewSettings(null);
+  const eventFile = { path: '交易复盘/大事/2026/12/2026-12-10-美联储议息.md', name: '2026-12-10-美联储议息.md', basename: '2026-12-10-美联储议息', extension: 'md' };
+  eventReader.app = { vault: { getMarkdownFiles: () => [eventFile], cachedRead: async () => updatedEvent } };
+  const loadedEvents = await eventReader.getEvents();
+  assert.equal(loadedEvents.length, 1);
+  assert.equal(loadedEvents[0].title, '美联储议息');
+  assert.equal(loadedEvents[0].date, '2026-12-10');
+  assert.match(loadedEvents[0].expectation, /修改后的预期/);
+  assert.equal(loadedEvents[0].actual, '实际维持不变');
+  assert.equal(loadedEvents[0].file, eventFile);
+  const drivenReader = new api.default(); drivenReader.settings = api.loadReviewSettings(null);
+  const drivenFile = { path: '交易复盘/事件驱动/2026/11/2026-11-06-央行降准公告.md', name: '2026-11-06-央行降准公告.md', basename: '2026-11-06-央行降准公告', extension: 'md' };
+  drivenReader.app = { vault: { getMarkdownFiles: () => [drivenFile], cachedRead: async () => drivenNote } };
+  const loadedDriven = await drivenReader.getEventDrivenRecords();
+  assert.equal(loadedDriven.length, 1);
+  assert.equal(loadedDriven[0].title, '央行降准公告');
+  assert.equal(loadedDriven[0].date, '2026-11-06');
+  assert.equal(loadedDriven[0].time, '20:00');
+  assert.equal(loadedDriven[0].result, '实际降准 0.25 个百分点');
+  assert.equal(loadedDriven[0].reaction, '次日高开');
+  assert.equal(loadedDriven[0].file, drivenFile);
   console.log('PASS: review parsing, filters, market cutoff, legacy notes, attachments, AI text analysis and annual calendar');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

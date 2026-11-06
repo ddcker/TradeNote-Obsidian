@@ -4,13 +4,17 @@
 
 复盘札记（TradeNote）是一款 [Obsidian](https://obsidian.md/) 本地交易复盘插件，用普通 Markdown 笔记记录每天的市场观察、交易操作和思考。它可以轻松实现：
 
-- **日历复盘**：按交易日创建和打开复盘，查看每天各板块的填写情况；
-- **五段记录**：市场观察、昨日验证、今日操作、今日反思、明日计划；
+- **日历复盘**：按日期创建和打开复盘（含周末和休市日），查看每天各板块的填写情况；
+- **六段记录**：A股市场、美股市场、昨日验证、今日操作、今日反思、明日计划；
 - **计划承接**：查看上一份复盘的明日计划，复制内容或打开原文；
 - **历史检索**：按月份、日期、正文和复盘板块查找记录，筛选已写或未写内容；
+- **段落标签**：用原生 Obsidian 标签标记观点来源或主题（如 #来源/某某、#救市政策），支持快捷插入和仪表盘筛选；
+- **随手记**：随时记录心得、政策和来源，按天归档，支持标签和仪表盘筛选；
+- **大事倒计时**：记录有确定日期的事件，查看剩余自然日和 A 股交易日，并保留预期与实际；
+- **事件驱动记录**：记录盘后公布的事件、市场预期、实际结果和次日反应，按“待结果 / 已出结果”管理；
 - **图片归档**：粘贴或拖入图片，按日期保存附件并插入笔记；
 - **文字分析**：可选配置 AI，对日报或周报生成纯文字分析；
-- **交易日历**：内置 A 股休市安排，支持手动补充和年度更新。
+- **交易日历**：内置 A 股休市安排，在日历中标记非交易日，支持手动补充和年度更新。
 
 复盘笔记和图片均保存在本地，不依赖其他插件，可以直接使用 Obsidian 的编辑、搜索、链接和备份功能。基础复盘无需配置 AI；启用 AI 分析时，所选范围内的复盘文字会发送到你配置的接口。
 
@@ -47,10 +51,11 @@
 
 ### 开始复盘
 
-1. 在仪表盘选择交易日，创建或打开当天的复盘笔记；
-2. 在五个板块下记录自己的观察、操作和反思，可以直接粘贴或拖入图片；
+1. 在仪表盘选择日期，创建或打开当天的复盘笔记；
+2. 在六个板块下记录自己的观察、操作和反思，可以直接粘贴或拖入图片；
 3. 在工作台回顾上一份复盘的明日计划，在历史资料库中搜索和筛选已有记录；
-4. 如需 AI 分析，在插件设置中填写接口地址、密钥和模型，再运行“AI 日报与周报分析”。
+4. 想起什么就运行“随手记一条”，选好标签后保存，内容会按天归档；
+5. 如需 AI 分析，在插件设置中填写接口地址、密钥和模型，再运行“AI 日报与周报分析”。
 
 ### 从源码构建
 
@@ -71,36 +76,61 @@ pnpm package
 
 ## 功能概览
 
-### 1. 日历工作台与五段复盘
+### 1. 日历工作台与六段复盘
 
-- 日历按 A 股交易日创建和打开复盘，已创建的日期显示五个板块的填写情况；
+- 日历按日期创建和打开复盘，周末和休市日同样可以记录心得与政策；已创建的日期显示六个板块的填写情况；
 - 今日工作台可直接打开笔记，或定位到对应板块；
-- 日报只包含五个一级标题，不添加 YAML 属性，也不预填示例内容；
+- 日报只包含六个一级标题，不添加 YAML 属性，也不预填示例内容；
 - 上一份复盘中的明日计划会显示在工作台，方便核对计划与实际操作。
 
 ### 2. 历史资料库与筛选
 
 - 支持全部、当前月、今日等范围，按日期或修改时间升序、降序排列；
 - 可以搜索日期和正文，按某一复盘板块及其是否已写筛选记录；
+- 可以按段落标签筛选，只显示包含该标签的复盘和板块；
+- 在日报编辑器中右键选择“插入复盘标签”，或运行命令面板中的同名命令，标签会追加到当前段落末尾；
+- 常用标签在设置页维护，打标签时也会合并仓库中已有的标签；标签是普通 Markdown 文本，Obsidian 的标签面板和 `tag:#标签` 搜索同样可用；
 - 点击摘要可直接定位原笔记中的标题；
 - 删除复盘支持二次确认，笔记通过 Obsidian 的文件回收机制处理。
 
-### 3. 图片附件与本地存储
+### 3. 随手记
+
+- 命令面板运行“随手记一条”、点击侧边栏笔形图标，或使用仪表盘顶部的“随手记”按钮，随时记录不属于日报的心得、政策和来源；
+- 每条记录按 `## HH:mm` 追加到当天的 `随手记/YYYY/MM/YYYY-MM-DD.md`，可选标签，保存后可直接打开；
+- 仪表盘底部的“随手记”面板支持按范围、标签和正文搜索，点击日期可定位到原条目；
+- 随手记和日报共用同一套原生 Obsidian 标签，`tag:#救市政策` 可以同时搜到两类内容。
+
+### 4. 大事倒计时
+
+- 记录有明确日期的大事（议息、政策窗口、解禁、财报等），每个事件一篇 Markdown 笔记，保存在 `大事/YYYY/MM/日期-标题.md`；
+- 独立页面按“即将发生 / 已发生”分组，显示日期、星期、剩余自然日和 A 股交易日；
+- 事件可以分别填写“预期”和“实际”，事件发生后保留原文，方便事后对照；
+- 新建和编辑通过页面顶部按钮或“新建大事”弹窗完成；交易日按插件内置的 A 股休市日历计算，尚未公布休市安排的年份只排除周末。
+
+### 5. 事件驱动记录
+
+- 适合盘后公布、次日才知道结果的事件（政策、数据、公告等），不参与倒计时；
+- 每个事件一篇 Markdown 笔记，保存在 `事件驱动/YYYY/MM/日期-标题.md`，记录事件内容、预期、结果和次日反应；
+- 页面按“待结果 / 已出结果”分组，可按状态和正文搜索；结果留空即视为待结果；
+- 可分别编辑事件、预期、结果和次日反应，事件发生后保留原有预期，方便对照。
+
+### 6. 图片附件与本地存储
 
 - 在复盘笔记中粘贴或拖入图片，自动按日期归档并插入图片链接；
 - 笔记和图片使用普通文件保存，停用插件后仍可阅读、编辑和备份；
-- 复盘根目录、日报目录和附件目录可在插件设置中调整。
+- 复盘根目录、日报目录、附件目录、随手记目录、大事目录和事件驱动目录可在插件设置中调整。
 
-### 4. AI 日报与周报分析
+### 7. AI 日报与周报分析
 
 - 支持兼容聊天补全格式的接口，可手动填写模型或获取模型列表，并测试连接；
 - 日报分析读取所选日期，周报分析汇总所选日期所在自然周；
 - 周报只使用截至所选日期或今天的记录，以较早者为准；
-- 分析前剔除图片引用，不读取图片文件；输出为纯文字，可复制或另存为笔记，不覆盖原始日报。
+- 分析前剔除图片引用，不读取图片文件；输出为纯文字，可复制或另存为笔记，不覆盖原始日报；
+- 可在设置中开启“AI 分析包含随手记”（默认关闭）；开启后，所选日期范围内的随手记也会发送到 AI 接口。
 
-### 5. A 股休市日历
+### 8. A 股休市日历
 
-- 内置 2024—2026 年休市安排，周六、周日固定排除，包括法定调休工作日；
+- 内置 2024—2026 年休市安排，周末和休市日在日历中标记为非交易日，但不限制创建复盘；
 - 可按年份手动补充休市日期，与内置日历合并使用；
 - 每年 12 月第四个星期一起检查上交所次年年度休市公告，同一北京时间日期最多尝试一次，完整保存后停止该年度搜索；
 - 插件关闭期间不会检查，下次打开时补查。尚未公布的休市安排无法提前确定，应以交易所公告为准。
@@ -120,6 +150,18 @@ pnpm package
 │     └─ MM/
 │        └─ DD/
 │           └─ image-时间戳.png
+├─ 随手记/
+│  └─ YYYY/
+│     └─ MM/
+│        └─ YYYY-MM-DD.md
+├─ 大事/
+│  └─ YYYY/
+│     └─ MM/
+│        └─ YYYY-MM-DD-事件.md
+├─ 事件驱动/
+│  └─ YYYY/
+│     └─ MM/
+│        └─ YYYY-MM-DD-事件.md
 └─ AI复盘分析/
    └─ YYYY/
 ```
@@ -127,7 +169,9 @@ pnpm package
 每篇日报的初始内容为：
 
 ```markdown
-# 市场观察
+# A股市场
+
+# 美股市场
 
 # 昨日验证
 
@@ -140,10 +184,13 @@ pnpm package
 
 ## 数据与网络说明
 
-- 日常复盘保存在当前 Obsidian 仓库内，不连接券商账户；
+- 日常复盘保存在当前 Obsidian 仓库内，不连接券商账户；标签也是笔记中的普通文本，不会额外上传；
+- 大事记录、预期和实际都保存在本地 Markdown 笔记中；
+- 事件驱动记录的预期、结果和次日反应同样保存在本地 Markdown 笔记中，不参与 AI 分析；
 - 年度日历更新访问[上海证券交易所](https://www.sse.com.cn/disclosure/dealinstruc/closed/)，用于获取休市公告；
 - AI 为可选功能。运行分析或测试连接、获取模型列表时，会请求你配置的服务；服务可能需要账户或产生费用，按服务方规则执行；
 - AI 分析会发送所选日期范围内剔除图片引用后的复盘文字，请根据自己的需要选择服务；
+- 默认只发送日报/周报复盘；开启“AI 分析包含随手记”后，所选范围内的随手记文字也会发送；
 - 接口密钥保存在当前仓库的 `.obsidian/plugins/tradenote/data.json` 中，请勿将该文件提交到公开仓库。
 - 历史检索和附件统计会枚举仓库中的文件路径；删除附件前会检查其他 Markdown 笔记的引用，避免误删仍被使用的图片。相关读取在本地完成，AI 分析只发送所选范围内的复盘文字；
 - 剪贴板仅在点击“复制”时写入相应文字，粘贴图片时读取本次粘贴事件携带的图片，不会在后台读取系统剪贴板。
@@ -177,9 +224,13 @@ TradeNote is a local-first trading journal for [Obsidian](https://obsidian.md/).
 
 ### Features
 
-- A trading-day calendar with section completion indicators.
-- Five-section daily notes and carryover of the previous review’s plan.
-- Search and filter past reviews by date, month, text, section, and whether a section has been written.
+- A calendar for any date, with non-trading days marked and section completion indicators.
+- Six-section daily notes for A-share and US market observations, previous-plan verification, trades, reflection, and next-day planning.
+- Native Obsidian paragraph tags such as `#来源/某某` or `#救市政策`, with quick insertion and dashboard filtering.
+- Quick notes for ad-hoc insights, policies, and sources, stored one file per day with native tags and a dashboard filter.
+- An event countdown page with natural-day and A-share trading-day counts, plus expectation and actual-outcome notes.
+- Event-driven records for after-close announcements, with expectations, actual results, and next-day market reactions.
+- Search and filter past reviews by date, month, text, section, tag, and whether a section has been written.
 - Paste or drop images into review notes and organize attachments by date.
 - Optional text-only AI analysis for daily and weekly reviews through a compatible Chat Completions API.
 - Built-in Chinese stock-market holidays for 2024–2026, manual additions, and annual updates from the Shanghai Stock Exchange.
@@ -191,7 +242,7 @@ Requires Obsidian 1.7.2 or later. Settings are searchable on Obsidian 1.13 and l
 1. In Obsidian, open **Settings → Community plugins** and turn off Restricted mode if needed.
 2. Select **Browse**, search for **TradeNote**, and open its listing.
 3. Select **Install**, then enable **TradeNote**.
-4. Open the review dashboard from the ribbon or command palette and select a trading day to start writing.
+4. Open the review dashboard from the ribbon or command palette and select a date to start writing.
 
 You can also open the [TradeNote community plugin page](https://obsidian.md/plugins?id=tradenote). Future updates are available from **Settings → Community plugins**.
 
@@ -205,7 +256,7 @@ The dashboard uses Obsidian’s note-read cache and loads deferred tabs before r
 
 Basic journaling does not require an AI account. Journal notes and attachments are stored in your vault. The plugin enumerates file paths for review search and attachment statistics, and checks other Markdown notes before deleting attachments to avoid removing images still in use. Clipboard writes happen when you select a copy action; image pasting reads only the image provided by the paste event, with no background clipboard reading.
 
-Annual calendar updates contact the Shanghai Stock Exchange. If you choose AI analysis, text from the selected review period is sent to your configured provider after image references are removed. Image files are not read for analysis. Connection tests and model-list requests also contact that provider, which may require an account or charge fees. API credentials are stored in `.obsidian/plugins/tradenote/data.json`; do not publish this file.
+Annual calendar updates contact the Shanghai Stock Exchange. If you choose AI analysis, text from the selected review period is sent to your configured provider after image references are removed. Image files are not read for analysis. Quick notes are stored as plain Markdown and are included in AI analysis only when you enable “Include quick notes in AI analysis”, which is off by default. Connection tests and model-list requests also contact that provider, which may require an account or charge fees. API credentials are stored in `.obsidian/plugins/tradenote/data.json`; do not publish this file.
 
 ### Development
 
