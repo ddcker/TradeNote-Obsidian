@@ -61,3 +61,63 @@ export function parseAnnualClosures(year: string, text: string): string[] | null
   }
   return dates.size >= 10 ? [...dates].sort() : null;
 }
+
+// NYSE weekday holidays; the exchange stays open on weekends and closes on the
+// observed weekday for fixed-date holidays (except New Year's Day on Saturday).
+const US_HOLIDAY_CACHE = new Map<number, Set<string>>();
+
+function utcDate(year: number, month: number, day: number): Date { return new Date(Date.UTC(year, month - 1, day)); }
+function dateKey(value: Date): string { return value.toISOString().slice(0, 10); }
+function shiftDays(value: Date, days: number): Date { const next = new Date(value.getTime()); next.setUTCDate(next.getUTCDate() + days); return next; }
+function observedWeekday(value: Date): Date {
+  const day = value.getUTCDay();
+  return day === 6 ? shiftDays(value, -1) : day === 0 ? shiftDays(value, 1) : value;
+}
+function nthWeekday(year: number, month: number, weekday: number, nth: number): Date {
+  const first = utcDate(year, month, 1);
+  return utcDate(year, month, 1 + ((weekday - first.getUTCDay() + 7) % 7) + (nth - 1) * 7);
+}
+function lastWeekday(year: number, month: number, weekday: number): Date {
+  const last = new Date(Date.UTC(year, month, 0));
+  return shiftDays(last, -((last.getUTCDay() - weekday + 7) % 7));
+}
+function easterSunday(year: number): Date {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  return utcDate(year, Math.floor((h + l - 7 * m + 114) / 31), ((h + l - 7 * m + 114) % 31) + 1);
+}
+
+export function usMarketHolidays(year: number): Set<string> {
+  const cached = US_HOLIDAY_CACHE.get(year);
+  if (cached) return cached;
+  const holidays = new Set<string>();
+  const newYear = utcDate(year, 1, 1);
+  if (newYear.getUTCDay() === 0) holidays.add(dateKey(shiftDays(newYear, 1)));
+  else if (newYear.getUTCDay() !== 6) holidays.add(dateKey(newYear));
+  if (year >= 1998) holidays.add(dateKey(nthWeekday(year, 1, 1, 3)));
+  holidays.add(dateKey(nthWeekday(year, 2, 1, 3)));
+  holidays.add(dateKey(shiftDays(easterSunday(year), -2)));
+  holidays.add(dateKey(lastWeekday(year, 5, 1)));
+  if (year >= 2022) holidays.add(dateKey(observedWeekday(utcDate(year, 6, 19))));
+  holidays.add(dateKey(observedWeekday(utcDate(year, 7, 4))));
+  holidays.add(dateKey(nthWeekday(year, 9, 1, 1)));
+  holidays.add(dateKey(nthWeekday(year, 11, 4, 4)));
+  holidays.add(dateKey(observedWeekday(utcDate(year, 12, 25))));
+  US_HOLIDAY_CACHE.set(year, holidays);
+  return holidays;
+}
+
+export function isUsTradingDay(date: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return false;
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  const value = utcDate(year, month, day);
+  if (value.getUTCFullYear() !== year || value.getUTCMonth() !== month - 1 || value.getUTCDate() !== day) return false;
+  const weekday = value.getUTCDay();
+  if (weekday === 0 || weekday === 6) return false;
+  return !usMarketHolidays(year).has(date);
+}

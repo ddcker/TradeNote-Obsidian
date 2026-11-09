@@ -1,23 +1,27 @@
 import { App, Editor, ItemView, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, SuggestModal, TFile, TFolder, WorkspaceLeaf, normalizePath, requestUrl, requireApiVersion, setIcon } from "obsidian";
-import { builtInClosures, expandClosures, HOLIDAY_RANGES, calendarCheckTarget, parseAnnualClosures } from "./market-calendar";
+import { builtInClosures, expandClosures, HOLIDAY_RANGES, calendarCheckTarget, isUsTradingDay as isUsMarketTradingDay, parseAnnualClosures } from "./market-calendar";
 import { plainReviewText, reviewRange, ReviewPeriod } from "./review-analysis";
 import { extractTags, mergeTags, normalizeTag, planTagInsertion } from "./review-tags";
 import { appendQuickNote as buildQuickNoteFile, parseQuickNotes, quickNoteBody, quickNoteHeader, QuickNoteEntry } from "./quick-notes";
 import { sectionText } from "./markdown-sections";
-import { EventData, EventDrivenData, eventCountdown, eventDrivenSections, eventDrivenStatus, eventDrivenTemplate, eventSections, eventSlug, eventTemplate, eventWeekday, parseEventMeta, parseEventNote, updateEventDrivenNote, updateEventNote } from "./events";
+import { EventData, EventDrivenData, eventCountdown, eventDrivenSections, eventDrivenStatus, eventDrivenTemplate, eventSections, eventSlug, eventTemplate, eventWeekday, normalizeEventTitle, parseEventMeta, parseEventNote, updateEventDrivenNote, updateEventNote } from "./events";
+import { parseTrack, trackTemplate, TrackData } from "./tracks";
+import { parseSystemNote, systemTemplate, SYSTEM_SECTIONS, SystemPattern } from "./trade-system";
+import { marketViewBody, marketViewTemplate, updateMarketView } from "./market-view";
+import { averageMarketFeel, MARKET_FEEL_HEADINGS, marketFeelTemplate, MarketFeelSideKey, MarketFeelSides, normalizeMarketFeelScore, parseMarketFeelNote, updateMarketFeelNote } from "./market-feel";
 
-interface StockReviewSettings { rootFolder: string; dailyFolder: string; attachmentFolder: string; quickFolder: string; eventFolder: string; eventDrivenFolder: string; confirmDelete: boolean; summaryOneLine: boolean; aiBaseUrl: string; aiApiKey: string; aiModel: string; includeQuickNotesInAi: boolean; reviewTags: string[]; calendarYears: Record<string, string[]>; calendarChecks: Record<string, { lastCheck: string; completed?: boolean; source?: string }>; }
-const DEFAULT_SETTINGS: StockReviewSettings = { rootFolder: "交易复盘", dailyFolder: "日报", attachmentFolder: "附件", quickFolder: "随手记", eventFolder: "大事", eventDrivenFolder: "事件驱动", confirmDelete: true, summaryOneLine: true, aiBaseUrl: "", aiApiKey: "", aiModel: "", includeQuickNotesInAi: false, reviewTags: [], calendarYears: {}, calendarChecks: {} };
+interface StockReviewSettings { rootFolder: string; dailyFolder: string; attachmentFolder: string; quickFolder: string; eventFolder: string; eventDrivenFolder: string; marketFeelFolder: string; trackFolder: string; systemFolder: string; confirmDelete: boolean; aiBaseUrl: string; aiApiKey: string; aiModel: string; includeQuickNotesInAi: boolean; reviewTags: string[]; calendarYears: Record<string, string[]>; calendarChecks: Record<string, { lastCheck: string; completed?: boolean; source?: string }>; }
+const DEFAULT_SETTINGS: StockReviewSettings = { rootFolder: "交易复盘", dailyFolder: "日报", attachmentFolder: "附件", quickFolder: "随手记", eventFolder: "大事", eventDrivenFolder: "事件驱动", marketFeelFolder: "大盘体感", trackFolder: "跟踪", systemFolder: "交易系统", confirmDelete: true, aiBaseUrl: "", aiApiKey: "", aiModel: "", includeQuickNotesInAi: false, reviewTags: [], calendarYears: {}, calendarChecks: {} };
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function loadReviewSettings(value: unknown): StockReviewSettings {
   const settings = { ...DEFAULT_SETTINGS, calendarYears: {} as Record<string, string[]>, calendarChecks: {} as StockReviewSettings["calendarChecks"], reviewTags: [] as string[] };
   if (!isRecord(value)) return settings;
-  for (const key of ["rootFolder", "dailyFolder", "attachmentFolder", "quickFolder", "eventFolder", "eventDrivenFolder", "aiBaseUrl", "aiApiKey", "aiModel"] as const) {
+  for (const key of ["rootFolder", "dailyFolder", "attachmentFolder", "quickFolder", "eventFolder", "eventDrivenFolder", "marketFeelFolder", "trackFolder", "systemFolder", "aiBaseUrl", "aiApiKey", "aiModel"] as const) {
     const saved = value[key];
     if (typeof saved === "string") settings[key] = saved.trim() || DEFAULT_SETTINGS[key];
   }
-  for (const key of ["confirmDelete", "summaryOneLine", "includeQuickNotesInAi"] as const) if (typeof value[key] === "boolean") settings[key] = value[key];
+  for (const key of ["confirmDelete", "includeQuickNotesInAi"] as const) if (typeof value[key] === "boolean") settings[key] = value[key];
   if (Array.isArray(value.reviewTags)) {
     const tags = new Map<string, string>();
     for (const item of value.reviewTags) {
@@ -39,9 +43,12 @@ function loadReviewSettings(value: unknown): StockReviewSettings {
 }
 
 const SECTIONS = ["A股市场", "美股市场", "昨日验证", "今日操作", "今日反思", "明日计划"] as const;
+const FEEL_SCORE_LABELS = ["", "很差", "较差", "中性", "较好", "很好"] as const;
 export const DASHBOARD_VIEW_TYPE = "tradenote-dashboard";
 export const EVENTS_VIEW_TYPE = "tradenote-events";
 export const EVENT_DRIVEN_VIEW_TYPE = "tradenote-event-driven";
+export const TRACKS_VIEW_TYPE = "tradenote-tracks";
+export const SYSTEM_VIEW_TYPE = "tradenote-system";
 type Section = typeof SECTIONS[number];
 type QuickFilter = "all" | "month" | "today";
 type SortBy = "date" | "modified";
@@ -66,11 +73,16 @@ function isTradingDay(date: string): boolean {
 function isImageFile(file: File): boolean { return file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name); }
 function reviewDateFromBasename(basename: string): string { return /^\d{8}复盘$/.test(basename) ? `${basename.slice(0, 4)}-${basename.slice(4, 6)}-${basename.slice(6, 8)}` : basename; }
 function joinPath(...parts: string[]): string { return normalizePath(parts.filter(Boolean).join("/")); }
-function addMonths(month: string, offset: number): string { const [year, value] = month.split("-").map(Number); const date = new Date(year, value - 1 + offset, 1); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
 function excerpt(value: string): string {
-  const paragraphs = value.trim().split(/(?:\r?\n){2,}/).map((paragraph) => paragraph.replace(/!\[.*?\]\(.*?\)|!\[\[.*?\]\]|\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const paragraphs = value.trim().split(/(?:\r?\n){2,}/).map((paragraph) => paragraph.replace(/!\[\[.*?\]\]|!\[.*?\]\(.*?\)|\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\s+/g, " ").trim()).filter(Boolean);
   const compact = paragraphs.join(" ");
   return compact.length > 180 ? `${compact.slice(0, 180)}...` : compact;
+}
+function reviewBodyText(value: string): string {
+  return value
+    .replace(/!\[\[.*?\]\]|!\[.*?\]\(.*?\)|\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[ \t]+\r?\n/g, "\n")
+    .trim();
 }
 function eventTextLine(parent: HTMLElement, label: string, value: string, empty: string): void {
   const line = parent.createDiv({ cls: "tradenote-event-text" });
@@ -99,11 +111,11 @@ class StockReviewSettingTab extends PluginSettingTab {
       this.folderDefinition("随手记文件夹", "相对于复盘根文件夹；每天一个 Markdown 文件。", "quickFolder"),
       this.folderDefinition("大事文件夹", "相对于复盘根文件夹；每个事件一篇 Markdown 笔记。", "eventFolder"),
       this.folderDefinition("事件驱动文件夹", "盘后公布、次日验证的事件记录。", "eventDrivenFolder"),
+      this.folderDefinition("大盘体感文件夹", "相对于复盘根文件夹；每天一篇，记录 A股与美股体感评分和文字。", "marketFeelFolder"),
+      this.folderDefinition("跟踪文件夹", "相对于复盘根文件夹；每个主题一篇长线笔记，持续记录。", "trackFolder"),
+      this.folderDefinition("交易系统文件夹", "相对于复盘根文件夹；每个买卖模式一篇笔记。", "systemFolder"),
       { name: "删除前二次确认", desc: "删除复盘及其附件前显示确认对话框。", render: setting => {
         setting.addToggle(toggle => toggle.setValue(this.plugin.settings.confirmDelete).onChange(async value => { this.plugin.settings.confirmDelete = value; await this.plugin.saveSettings(); }));
-      } },
-      { name: "记录摘要只展示一行", desc: "关闭后，摘要正文可在自身列内换行，不会占用板块标题列。", render: setting => {
-        setting.addToggle(toggle => toggle.setValue(this.plugin.settings.summaryOneLine).onChange(async value => { this.plugin.settings.summaryOneLine = value; await this.plugin.saveSettings(); }));
       } },
       { name: "复盘标签", desc: "打标签时优先显示；同时合并仓库中已有的标签。删除只影响快捷列表，不会修改笔记。", render: setting => this.renderTagSetting(setting) },
       { name: "AI 分析包含随手记", desc: "开启后，所选日期范围内的随手记文字也会发送到你配置的 AI 接口；默认关闭。", render: setting => {
@@ -136,7 +148,7 @@ class StockReviewSettingTab extends PluginSettingTab {
     else this.renderLegacySettings();
   }
 
-  private folderDefinition(name: string, desc: string, key: "rootFolder" | "dailyFolder" | "attachmentFolder" | "quickFolder" | "eventFolder" | "eventDrivenFolder"): ReviewSettingDefinition {
+  private folderDefinition(name: string, desc: string, key: "rootFolder" | "dailyFolder" | "attachmentFolder" | "quickFolder" | "eventFolder" | "eventDrivenFolder" | "marketFeelFolder" | "trackFolder" | "systemFolder"): ReviewSettingDefinition {
     return { name, desc, render: setting => {
       setting.addText(text => text.setValue(this.plugin.settings[key]).onChange(async value => { this.plugin.settings[key] = value.trim() || DEFAULT_SETTINGS[key]; await this.plugin.saveSettings(); }));
     } };
@@ -255,14 +267,14 @@ class BackfillReviewModal extends Modal {
     this.selectedDate = initialDate;
   }
   onOpen(): void {
-    this.setTitle("补录复盘");
+    this.setTitle("选择复盘日期");
     this.contentEl.createEl("p", { text: "选择要创建或打开的复盘日期。" });
     const input = this.contentEl.createEl("input", { type: "date", value: this.selectedDate, attr: { max: dateString(), "aria-label": "复盘日期" } });
     input.addEventListener("change", () => { this.selectedDate = input.value; });
     const actions = this.contentEl.createDiv({ cls: "modal-button-container" });
     const cancel = actions.createEl("button", { text: "取消", attr: { type: "button" } });
     cancel.addEventListener("click", () => this.close());
-    const confirm = actions.createEl("button", { cls: "mod-cta", text: "创建并打开", attr: { type: "button" } });
+    const confirm = actions.createEl("button", { cls: "mod-cta", text: "打开复盘", attr: { type: "button" } });
     confirm.addEventListener("click", () => void this.submit());
   }
   private async submit(): Promise<void> {
@@ -316,6 +328,10 @@ class ReviewTagSuggestModal extends SuggestModal<string> {
 interface LoadedQuickNote extends QuickNoteEntry { file: TFile; }
 interface EventRecord extends EventData { file: TFile; }
 interface EventDrivenRecord extends EventDrivenData { file: TFile; }
+interface MarketViewRecord { file: TFile | null; text: string; updated: number | null; }
+interface MarketFeelRecord extends MarketFeelSides { file: TFile; date: string; }
+interface TrackRecord extends TrackData { file: TFile; }
+interface SystemRecord extends SystemPattern { file: TFile; }
 
 class QuickNoteModal extends Modal {
   private selectedTags = new Set<string>();
@@ -375,6 +391,141 @@ class QuickNoteModal extends Modal {
       this.close();
       new Notice("已保存到今日随手记");
       if (open) await this.plugin.openQuickNoteAt(file, time);
+    } catch (error) { new Notice(`保存失败：${error instanceof Error ? error.message : String(error)}`); }
+  }
+}
+
+class MarketViewModal extends Modal {
+  private textarea!: HTMLTextAreaElement;
+  constructor(app: App, private readonly plugin: StockReviewPlugin, private readonly text: string) { super(app); }
+  onOpen(): void {
+    this.setTitle("整体观点");
+    this.contentEl.createEl("p", { cls: "tradenote-muted", text: "保存后会覆盖同一个文件，仪表盘始终显示最新观点。" });
+    this.textarea = this.contentEl.createEl("textarea", { cls: "tradenote-viewpoint-input", attr: { placeholder: "例如：最近两个月按反弹对待，指数在区间内震荡，重点观察成交量能否持续放大……", "aria-label": "整体观点内容" } });
+    this.textarea.value = this.text;
+    const actions = this.contentEl.createDiv({ cls: "modal-button-container" });
+    const cancel = actions.createEl("button", { text: "取消", attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    const save = actions.createEl("button", { cls: "mod-cta", text: "保存", attr: { type: "button" } });
+    save.addEventListener("click", () => void this.submit());
+    this.scope.register(["Mod"], "Enter", () => { void this.submit(); return false; });
+    this.textarea.focus();
+    this.textarea.setSelectionRange(this.textarea.value.length, this.textarea.value.length);
+  }
+  private async submit(): Promise<void> {
+    const text = this.textarea.value.trim();
+    if (!text) { new Notice("请输入整体观点内容"); this.textarea.focus(); return; }
+    try {
+      await this.plugin.saveMarketView(text);
+      this.close();
+      new Notice("整体观点已更新");
+    } catch (error) { new Notice(`保存失败：${error instanceof Error ? error.message : String(error)}`); }
+  }
+}
+
+class MarketFeelDateModal extends Modal {
+  constructor(app: App, private readonly plugin: StockReviewPlugin) { super(app); }
+  onOpen(): void {
+    this.setTitle("补录大盘体感");
+    this.contentEl.createEl("p", { cls: "tradenote-muted", text: "仅支持 A股或美股交易日；两边都休市的日子无需记录。" });
+    const years = [...Object.keys(HOLIDAY_RANGES), ...Object.keys(this.plugin.settings.calendarYears)].map(Number).filter(Number.isFinite);
+    const min = years.length ? `${Math.min(...years)}-01-01` : `${new Date().getFullYear() - 2}-01-01`;
+    const input = this.contentEl.createEl("input", { type: "date", cls: "tradenote-feel-date-input", attr: { min, max: dateString(), value: this.defaultDate(), "aria-label": "补录日期" } });
+    const actions = this.contentEl.createDiv({ cls: "modal-button-container" });
+    const cancel = actions.createEl("button", { text: "取消", attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    const next = actions.createEl("button", { cls: "mod-cta", text: "下一步", attr: { type: "button" } });
+    next.addEventListener("click", () => void this.next(input.value));
+    input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); void this.next(input.value); } });
+    input.focus();
+  }
+  private defaultDate(): string {
+    let date = dateString();
+    for (let index = 0; index < 14 && !this.plugin.isMarketFeelTradingDay(date); index++) {
+      const value = new Date(`${date}T12:00:00Z`);
+      value.setUTCDate(value.getUTCDate() - 1);
+      date = value.toISOString().slice(0, 10);
+    }
+    return date;
+  }
+  private async next(date: string): Promise<void> {
+    if (!isValidDate(date)) { new Notice("请选择有效日期"); return; }
+    if (date > dateString()) { new Notice("不能补录未来日期"); return; }
+    if (!this.plugin.isMarketFeelTradingDay(date)) { new Notice("该日期 A股和美股都休市，无需记录"); return; }
+    this.close();
+    await this.plugin.openMarketFeel(date);
+  }
+}
+
+class MarketFeelModal extends Modal {
+  private readonly scores: Record<MarketFeelSideKey, number>;
+  private readonly notes: Record<MarketFeelSideKey, string>;
+  private readonly scoreButtons: Record<MarketFeelSideKey, HTMLButtonElement[]> = { a: [], us: [] };
+  private readonly scoreHints: Record<MarketFeelSideKey, HTMLElement> = { a: null!, us: null! };
+  private readonly visible: Record<MarketFeelSideKey, boolean>;
+  constructor(app: App, private readonly plugin: StockReviewPlugin, private readonly date: string, record?: MarketFeelRecord) {
+    super(app);
+    this.scores = { a: normalizeMarketFeelScore(record?.a.score ?? 0), us: normalizeMarketFeelScore(record?.us.score ?? 0) };
+    this.notes = { a: record?.a.note ?? "", us: record?.us.note ?? "" };
+    this.visible = {
+      a: plugin.isTradingDay(date) || Boolean(record?.a.score || record?.a.note.trim()),
+      us: plugin.isUsTradingDay(date) || Boolean(record?.us.score || record?.us.note.trim()),
+    };
+    if (!this.visible.a && !this.visible.us) { this.visible.a = true; this.visible.us = true; }
+  }
+  onOpen(): void {
+    this.setTitle(`${this.date} 大盘体感`);
+    this.contentEl.createEl("p", { cls: "tradenote-muted", text: "1 很差 · 2 较差 · 3 中性 · 4 较好 · 5 很好。评分可选；写了文字时请同时选择分数。" });
+    const closed = (["a", "us"] as const).filter(side => !this.visible[side]);
+    if (closed.length) this.contentEl.createEl("p", { cls: "tradenote-muted", text: `${closed.map(side => MARKET_FEEL_HEADINGS[side]).join("、")}休市，本次无需记录该市场。` });
+    for (const side of ["a", "us"] as const) if (this.visible[side]) this.renderSide(side);
+    const actions = this.contentEl.createDiv({ cls: "modal-button-container" });
+    const cancel = actions.createEl("button", { text: "取消", attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    const save = actions.createEl("button", { cls: "mod-cta", text: "保存", attr: { type: "button" } });
+    save.addEventListener("click", () => void this.submit());
+    this.scope.register(["Mod"], "Enter", () => { void this.submit(); return false; });
+  }
+  private renderSide(side: MarketFeelSideKey): void {
+    const heading = MARKET_FEEL_HEADINGS[side];
+    const block = this.contentEl.createDiv({ cls: "tradenote-feel-form" });
+    const header = block.createDiv({ cls: "tradenote-feel-form-header" });
+    header.createSpan({ cls: "tradenote-feel-form-title", text: heading });
+    if (!(side === "a" ? this.plugin.isTradingDay(this.date) : this.plugin.isUsTradingDay(this.date))) header.createSpan({ cls: "tradenote-muted", text: "休市，保留原记录" });
+    const scores = header.createDiv({ cls: "tradenote-feel-form-scores", attr: { role: "group", "aria-label": `${heading}体感评分` } });
+    for (let score = 1; score <= 5; score++) {
+      const button = scores.createEl("button", { cls: `tradenote-feel-score${this.scores[side] === score ? " is-active" : ""}`, text: String(score), attr: { type: "button", title: `${score} 分 · ${FEEL_SCORE_LABELS[score]}`, "aria-label": `${heading} ${score} 分，${FEEL_SCORE_LABELS[score]}`, "aria-pressed": String(this.scores[side] === score) } });
+      button.addEventListener("click", () => {
+        this.scores[side] = this.scores[side] === score ? 0 : score;
+        this.refreshScore(side);
+      });
+      this.scoreButtons[side].push(button);
+    }
+    this.scoreHints[side] = header.createSpan({ cls: "tradenote-feel-form-hint", text: FEEL_SCORE_LABELS[this.scores[side]] || "未评分" });
+    const textarea = block.createEl("textarea", { cls: "tradenote-feel-input", attr: { placeholder: `写下今天对${heading}的整体感受、情绪和赚钱效应……`, "aria-label": `${heading}体感文字` } });
+    textarea.value = this.notes[side];
+    textarea.addEventListener("input", () => { this.notes[side] = textarea.value; });
+    if (side === (this.visible.a ? "a" : "us")) textarea.focus();
+  }
+  private refreshScore(side: MarketFeelSideKey): void {
+    this.scoreButtons[side].forEach((button, index) => {
+      const active = this.scores[side] === index + 1;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    this.scoreHints[side].setText(FEEL_SCORE_LABELS[this.scores[side]] || "未评分");
+  }
+  private async submit(): Promise<void> {
+    const sides: MarketFeelSides = {
+      a: { score: this.scores.a, note: this.notes.a.trim() },
+      us: { score: this.scores.us, note: this.notes.us.trim() },
+    };
+    if (!sides.a.score && !sides.a.note && !sides.us.score && !sides.us.note) { new Notice("请至少记录 A股或美股的一项内容"); return; }
+    for (const side of ["a", "us"] as const) if (this.visible[side] && sides[side].note && !sides[side].score) { new Notice(`请为${MARKET_FEEL_HEADINGS[side]}选择 1-5 分`); return; }
+    try {
+      await this.plugin.saveMarketFeel(this.date, sides);
+      this.close();
+      new Notice("大盘体感已保存");
     } catch (error) { new Notice(`保存失败：${error instanceof Error ? error.message : String(error)}`); }
   }
 }
@@ -643,6 +794,154 @@ class StockReviewEventDrivenView extends ItemView {
   }
 }
 
+class TrackModal extends Modal {
+  private titleInput!: HTMLInputElement;
+  constructor(app: App, private readonly plugin: StockReviewPlugin) { super(app); }
+  onOpen(): void {
+    this.setTitle("新建笔记");
+    const form = this.contentEl.createDiv({ cls: "tradenote-event-form" });
+    form.createEl("label", { text: "标题" });
+    this.titleInput = form.createEl("input", { type: "text", attr: { placeholder: "例如 救市政策观察" } });
+    const actions = this.contentEl.createDiv({ cls: "modal-button-container" });
+    const cancel = actions.createEl("button", { text: "取消", attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    const save = actions.createEl("button", { cls: "mod-cta", text: "创建", attr: { type: "button" } });
+    save.addEventListener("click", () => void this.submit());
+    this.scope.register(["Mod"], "Enter", () => { void this.submit(); return false; });
+    this.titleInput.focus();
+  }
+  private async submit(): Promise<void> {
+    const title = this.titleInput.value.trim();
+    if (!title) { new Notice("请输入笔记标题"); this.titleInput.focus(); return; }
+    try {
+      const file = await this.plugin.createTrack(title);
+      this.close();
+      new Notice("已创建笔记");
+      await this.plugin.openFile(file);
+    } catch (error) { new Notice(`创建失败：${error instanceof Error ? error.message : String(error)}`); }
+  }
+}
+
+class SystemModal extends Modal {
+  private titleInput!: HTMLInputElement;
+  constructor(app: App, private readonly plugin: StockReviewPlugin) { super(app); }
+  onOpen(): void {
+    this.setTitle("新建交易模式");
+    const form = this.contentEl.createDiv({ cls: "tradenote-event-form" });
+    form.createEl("label", { text: "模式名称" });
+    this.titleInput = form.createEl("input", { type: "text", attr: { placeholder: "例如 首板低吸" } });
+    const actions = this.contentEl.createDiv({ cls: "modal-button-container" });
+    const cancel = actions.createEl("button", { text: "取消", attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    const save = actions.createEl("button", { cls: "mod-cta", text: "创建", attr: { type: "button" } });
+    save.addEventListener("click", () => void this.submit());
+    this.scope.register(["Mod"], "Enter", () => { void this.submit(); return false; });
+    this.titleInput.focus();
+  }
+  private async submit(): Promise<void> {
+    const title = this.titleInput.value.trim();
+    if (!title) { new Notice("请输入模式名称"); this.titleInput.focus(); return; }
+    try {
+      const file = await this.plugin.createSystemPattern(title);
+      this.close();
+      new Notice("已创建交易模式");
+      await this.plugin.openFile(file);
+    } catch (error) { new Notice(`创建失败：${error instanceof Error ? error.message : String(error)}`); }
+  }
+}
+
+class StockReviewTracksView extends ItemView {
+  private renderVersion = 0;
+  private query = "";
+  constructor(leaf: WorkspaceLeaf, private readonly plugin: StockReviewPlugin) { super(leaf); }
+  getViewType(): string { return TRACKS_VIEW_TYPE; }
+  getDisplayText(): string { return "跟踪"; }
+  getIcon(): string { return "radar"; }
+  async onOpen(): Promise<void> { this.containerEl.addClass("tradenote-tracks-container"); await this.render(); }
+  async refresh(): Promise<void> { await this.render(); }
+
+  private async render(): Promise<void> {
+    const version = ++this.renderVersion;
+    const tracks = await this.plugin.getTracks();
+    if (version !== this.renderVersion) return;
+    this.contentEl.empty();
+    this.contentEl.addClass("tradenote-tracks");
+    const inner = this.contentEl.createDiv({ cls: "tradenote-tracks-inner" });
+    const header = inner.createDiv({ cls: "tradenote-tracks-header" });
+    const title = header.createDiv();
+    title.createEl("h2", { text: "跟踪" });
+    title.createSpan({ cls: "tradenote-muted", text: "持续记录的长线笔记" });
+    const actions = header.createDiv({ cls: "tradenote-tracks-header-actions" });
+    const add = actions.createEl("button", { cls: "mod-cta", text: "新建笔记", attr: { type: "button" } });
+    add.addEventListener("click", () => new TrackModal(this.app, this.plugin).open());
+    const controls = inner.createDiv({ cls: "tradenote-tracks-controls" });
+    const search = controls.createEl("input", { type: "search", value: this.query, placeholder: "搜索标题或正文", cls: "tradenote-tracks-search", attr: { "aria-label": "搜索笔记" } });
+    search.addEventListener("input", (event) => { const inputEvent = event as UIEvent; if (inputEvent.instanceOf(InputEvent) && inputEvent.isComposing) return; this.query = search.value.toLowerCase().trim(); void this.render(); });
+    search.addEventListener("compositionend", () => { this.query = search.value.toLowerCase().trim(); void this.render(); });
+    if (!tracks.length) { inner.createDiv({ cls: "tradenote-empty", text: "还没有笔记。点击右上角「新建笔记」开始记录。" }); return; }
+    const keyword = this.query;
+    const filtered = keyword ? tracks.filter(track => [track.title, track.text].join("\n").toLowerCase().includes(keyword)) : tracks;
+    const list = inner.createDiv({ cls: "tradenote-tracks-list" });
+    if (!filtered.length) { list.createDiv({ cls: "tradenote-empty", text: "没有匹配的笔记。" }); return; }
+    for (const track of filtered) this.renderTrack(list, track);
+  }
+
+  private renderTrack(parent: HTMLElement, track: TrackRecord): void {
+    const row = parent.createEl("button", { cls: "tradenote-track-row", text: track.title, attr: { type: "button", "aria-label": `打开 ${track.title}` } });
+    row.addEventListener("click", () => void this.plugin.openFile(track.file));
+  }
+}
+
+class StockReviewSystemView extends ItemView {
+  private renderVersion = 0;
+  private query = "";
+  constructor(leaf: WorkspaceLeaf, private readonly plugin: StockReviewPlugin) { super(leaf); }
+  getViewType(): string { return SYSTEM_VIEW_TYPE; }
+  getDisplayText(): string { return "交易系统"; }
+  getIcon(): string { return "notebook-text"; }
+  async onOpen(): Promise<void> { this.containerEl.addClass("tradenote-system-container"); await this.render(); }
+  async refresh(): Promise<void> { await this.render(); }
+
+  private async render(): Promise<void> {
+    const version = ++this.renderVersion;
+    const patterns = await this.plugin.getSystemPatterns();
+    if (version !== this.renderVersion) return;
+    this.contentEl.empty();
+    this.contentEl.addClass("tradenote-system");
+    const inner = this.contentEl.createDiv({ cls: "tradenote-system-inner" });
+    const header = inner.createDiv({ cls: "tradenote-system-header" });
+    const title = header.createDiv();
+    title.createEl("h2", { text: "交易系统" });
+    title.createSpan({ cls: "tradenote-muted", text: "沉淀验证过的买卖模式" });
+    const actions = header.createDiv({ cls: "tradenote-system-header-actions" });
+    const add = actions.createEl("button", { cls: "mod-cta", text: "新建模式", attr: { type: "button" } });
+    add.addEventListener("click", () => new SystemModal(this.app, this.plugin).open());
+    const controls = inner.createDiv({ cls: "tradenote-system-controls" });
+    const search = controls.createEl("input", { type: "search", value: this.query, placeholder: "搜索模式或正文", cls: "tradenote-system-search", attr: { "aria-label": "搜索交易模式" } });
+    search.addEventListener("input", (event) => { const inputEvent = event as UIEvent; if (inputEvent.instanceOf(InputEvent) && inputEvent.isComposing) return; this.query = search.value.toLowerCase().trim(); void this.render(); });
+    search.addEventListener("compositionend", () => { this.query = search.value.toLowerCase().trim(); void this.render(); });
+    if (!patterns.length) { inner.createDiv({ cls: "tradenote-empty", text: "还没有交易模式。点击右上角「新建模式」，把验证过好用的打法记下来。" }); return; }
+    const keyword = this.query;
+    const filtered = keyword ? patterns.filter(pattern => [pattern.title, ...SYSTEM_SECTIONS.map(section => pattern.sections[section])].join("\n").toLowerCase().includes(keyword)) : patterns;
+    const list = inner.createDiv({ cls: "tradenote-system-list" });
+    if (!filtered.length) { list.createDiv({ cls: "tradenote-empty", text: "没有匹配的模式。" }); return; }
+    for (const pattern of filtered) this.renderPattern(list, pattern);
+  }
+
+  private renderPattern(parent: HTMLElement, pattern: SystemRecord): void {
+    const card = parent.createDiv({ cls: "tradenote-event tradenote-system-pattern" });
+    const content = card.createDiv({ cls: "tradenote-event-content" });
+    const main = content.createDiv({ cls: "tradenote-event-main" });
+    const name = main.createEl("button", { cls: "tradenote-event-title", text: pattern.title, attr: { type: "button", "aria-label": `打开 ${pattern.title}` } });
+    name.addEventListener("click", () => void this.plugin.openFile(pattern.file));
+    const meta = content.createDiv({ cls: "tradenote-event-meta" });
+    meta.createSpan({ text: pattern.created ? `${pattern.created} 创建` : "未记录创建日期" });
+    const texts = content.createDiv({ cls: "tradenote-event-texts" });
+    const section = SYSTEM_SECTIONS.find(item => pattern.sections[item].trim());
+    eventTextLine(texts, section ?? "内容", section ? pattern.sections[section] : "", "还没有记录内容");
+  }
+}
+
 class StockReviewDashboardView extends ItemView {
   private month = monthString();
   private query = "";
@@ -651,7 +950,7 @@ class StockReviewDashboardView extends ItemView {
   private quickFilter: QuickFilter = "month";
   private sortBy: SortBy = "date";
   private sortDirection: SortDirection = "descending";
-  private resultLimit = 40;
+  private resultLimit = 5;
   private tagFilter = "";
   private quickQuery = "";
   private quickTagFilter = "";
@@ -671,18 +970,16 @@ class StockReviewDashboardView extends ItemView {
     const scrollTop = this.contentEl.scrollTop;
     const activeSearch = document.activeElement?.instanceOf(HTMLInputElement) && document.activeElement.matches(".tradenote-search, .tradenote-quick-search") ? document.activeElement : null;
     const searchCaret = activeSearch?.selectionStart ?? null;
-    const [entries, quickNotes, events] = await Promise.all([this.plugin.getReviewEntries(), this.plugin.getQuickNotes(), this.plugin.getEvents()]);
+    const [entries, quickNotes, events, marketView, marketFeels] = await Promise.all([this.plugin.getReviewEntries(), this.plugin.getQuickNotes(), this.plugin.getEvents(), this.plugin.getMarketView(), this.plugin.getMarketFeels()]);
     if (version !== this.renderVersion) return;
     this.contentEl.empty();
     this.contentEl.addClass("tradenote-dashboard");
     const dashboard = this.contentEl.createDiv({ cls: "tradenote-dashboard-inner" });
     this.renderHeader(dashboard);
-    const workspace = dashboard.createDiv({ cls: "tradenote-workspace" });
-    this.renderCalendar(workspace.createDiv({ cls: "tradenote-calendar-workspace" }), entries.filter((entry) => entry.date.startsWith(this.month)));
-    const today = dateString();
-    this.renderTodayWorkspace(workspace.createDiv({ cls: "tradenote-today-workspace" }), entries.find((entry) => entry.date === today), entries.find((entry) => entry.date < today));
-    this.renderEventsPanel(dashboard, events);
     this.renderReviewIndex(dashboard, entries);
+    this.renderMarketViewPanel(dashboard, marketView);
+    this.renderMarketFeelPanel(dashboard, marketFeels);
+    this.renderEventsPanel(dashboard, events);
     this.renderQuickNotes(dashboard, quickNotes);
     window.requestAnimationFrame(() => {
       if (version !== this.renderVersion) return;
@@ -701,81 +998,12 @@ class StockReviewDashboardView extends ItemView {
     title.createEl("h2", { text: "复盘仪表盘" });
     const actions = header.createDiv({ cls: "tradenote-header-actions" });
     this.iconButton(actions, "notebook-pen", "AI 日报与周报分析", () => new ReviewAnalysisModal(this.app, this.plugin).open());
-    this.iconButton(actions, "calendar-plus", "补录指定日期复盘", () => this.openBackfillModal());
     this.iconButton(actions, "square-pen", "随手记一条", () => new QuickNoteModal(this.app, this.plugin).open());
     this.iconButton(actions, "hourglass", "大事倒计时", () => void this.plugin.openEvents());
+    this.iconButton(actions, "radar", "打开跟踪笔记", () => void this.plugin.openTracks());
+    this.iconButton(actions, "notebook-text", "打开交易系统", () => void this.plugin.openSystem());
     this.iconButton(actions, "settings", "打开TradeNote 设置", () => void this.plugin.openSettings());
     this.iconButton(actions, "rotate-cw", "重启 TradeNote 插件", () => void this.plugin.restart());
-  }
-
-  private renderCalendar(parent: HTMLElement, entries: ReviewEntry[]): void {
-    const header = parent.createDiv({ cls: "tradenote-workspace-heading" });
-    const calendarTitle = header.createDiv({ cls: "tradenote-calendar-title" });
-    const month = calendarTitle.createEl("input", { cls: "tradenote-month-input", type: "month", value: this.month, attr: { "aria-label": "选择复盘月份" } });
-    month.addEventListener("change", () => { if (/^\d{4}-\d{2}$/.test(month.value)) { this.month = month.value; void this.render(); } });
-    const controls = header.createDiv({ cls: "tradenote-calendar-controls" });
-    this.iconButton(controls, "chevron-left", "上个月", () => { this.month = addMonths(this.month, -1); void this.render(); });
-    if (this.month !== monthString()) this.iconButton(controls, "locate-fixed", "回到本月", () => { this.month = monthString(); void this.render(); });
-    this.iconButton(controls, "chevron-right", "下个月", () => { this.month = addMonths(this.month, 1); void this.render(); });
-    const byDate = new Map(entries.map((entry) => [entry.date, entry]));
-    const grid = parent.createDiv({ cls: "tradenote-calendar" });
-    ["日", "一", "二", "三", "四", "五", "六"].forEach((label) => grid.createDiv({ cls: "tradenote-weekday", text: label }));
-    const [year, monthValue] = this.month.split("-").map(Number), first = new Date(year, monthValue - 1, 1), offset = first.getDay(), days = new Date(year, monthValue, 0).getDate();
-    for (let index = 0; index < offset; index++) grid.createDiv({ cls: "tradenote-calendar-blank" });
-    for (let day = 1; day <= days; day++) {
-      const date = `${this.month}-${String(day).padStart(2, "0")}`, entry = byDate.get(date);
-      const isFuture = date > dateString();
-      const isTradingDay = this.plugin.isTradingDay(date);
-      const disabled = isFuture;
-      const cell = grid.createEl("button", { cls: `tradenote-day${entry ? " has-review" : ""}${date === dateString() ? " is-today" : ""}${!isTradingDay ? " is-non-trading" : ""}${isFuture ? " is-future" : ""}${!entry && !disabled ? " is-past-empty" : ""}`, attr: { type: "button", "aria-label": `${date}${!isTradingDay ? "，A股休市" : ""}${disabled ? "，未来日期，不可创建" : entry ? "，打开复盘" : "，新建复盘"}` } });
-      if (disabled) cell.disabled = true;
-      cell.createSpan({ text: String(day) });
-      if (entry) {
-        const meter = cell.createDiv({ cls: "tradenote-day-meter", attr: { "aria-label": `已填写 ${entry.filledCount}/${SECTIONS.length} 个板块` } });
-        for (const section of SECTIONS) meter.createSpan({ cls: entry.sections[section] ? "is-filled" : "", attr: { title: `${section}${entry.sections[section] ? "：已填写" : "：未填写"}` } });
-      }
-      if (!disabled) {
-        cell.addEventListener("click", () => void this.openCalendarDate(date));
-      }
-    }
-  }
-
-  private renderTodayWorkspace(parent: HTMLElement, entry?: ReviewEntry, previousEntry?: ReviewEntry): void {
-    const header = parent.createDiv({ cls: "tradenote-workspace-heading" });
-    header.createEl("h3", { text: "今日复盘" });
-    header.createSpan({ text: dateString() });
-    const nonTrading = !this.plugin.isTradingDay(dateString());
-    parent.createEl("p", { cls: "tradenote-action-status", text: `${nonTrading ? "A股休市 · " : ""}${entry ? `已填写 ${entry.filledCount}/${SECTIONS.length} 个板块${entry.attachmentCount ? ` · ${entry.attachmentCount} 张图片` : ""}` : "尚未创建今日记录"}` });
-    const progress = parent.createDiv({ cls: "tradenote-section-progress" });
-    for (const section of SECTIONS) {
-      const sectionIndex = SECTIONS.indexOf(section) + 1;
-      const row = progress.createEl("button", { cls: `tradenote-section-progress-row tradenote-section-${sectionIndex}${entry?.sections[section] ? " is-filled" : ""}`, attr: { type: "button", "aria-label": `打开今日复盘的${section}` } });
-      const icon = row.createSpan(); setIcon(icon, entry?.sections[section] ? "check" : "minus"); row.createSpan({ text: section });
-      row.addEventListener("click", () => void this.plugin.openDailySection(section));
-    }
-    const nextSection = SECTIONS.find((section) => !entry?.sections[section]) ?? SECTIONS[0];
-    const dailyActions = parent.createDiv({ cls: "tradenote-daily-actions" });
-    const openDaily = dailyActions.createEl("button", { cls: "mod-cta tradenote-daily-action", text: entry ? `继续：${nextSection}` : `开始：${SECTIONS[0]}`, attr: { type: "button" } });
-    openDaily.addEventListener("click", () => void this.plugin.openDailyFocus());
-    if (previousEntry) {
-      const openPrevious = dailyActions.createEl("button", { cls: "tradenote-previous-action", text: `查看 ${previousEntry.date}`, attr: { type: "button", "aria-label": `打开上一份复盘：${previousEntry.date}` } });
-      openPrevious.addEventListener("click", () => void this.plugin.openFile(previousEntry.file));
-      const previousPlan = previousEntry.sections["明日计划"];
-      if (previousPlan) {
-        const carryover = parent.createDiv({ cls: "tradenote-carryover" });
-        const carryoverHeader = carryover.createDiv({ cls: "tradenote-carryover-header" });
-        carryoverHeader.createSpan({ text: `今日计划 · 来自 ${previousEntry.date}` });
-        const actions = carryoverHeader.createDiv({ cls: "tradenote-carryover-actions" });
-        const copyPlan = actions.createEl("button", { cls: "clickable-icon", attr: { type: "button", "aria-label": "复制上一份明日计划", title: "复制上一份明日计划" } });
-        setIcon(copyPlan, "copy");
-        copyPlan.addEventListener("click", () => void this.copyPreviousPlan(previousPlan));
-        const openPlan = actions.createEl("button", { cls: "clickable-icon", attr: { type: "button", "aria-label": `打开 ${previousEntry.date} 的明日计划`, title: "打开原复盘" } });
-        setIcon(openPlan, "arrow-up-right");
-        openPlan.addEventListener("click", () => void this.plugin.openReviewSection(previousEntry.file, "明日计划"));
-        carryover.createSpan({ cls: "tradenote-carryover-copy", text: excerpt(previousPlan) });
-      }
-    }
-
   }
 
   private renderEventsPanel(parent: HTMLElement, events: EventRecord[]): void {
@@ -798,6 +1026,86 @@ class StockReviewDashboardView extends ItemView {
       const more = panel.createEl("button", { cls: "tradenote-countdown-more", text: this.eventsExpanded ? "收起" : `展开全部（还有 ${upcoming.length - 5} 件）`, attr: { type: "button" } });
       more.addEventListener("click", () => { this.eventsExpanded = !this.eventsExpanded; void this.render(); });
     }
+  }
+
+  private renderMarketViewPanel(parent: HTMLElement, view: MarketViewRecord): void {
+    const panel = parent.createDiv({ cls: "tradenote-viewpoint-panel" });
+    const header = panel.createDiv({ cls: "tradenote-viewpoint-header" });
+    const heading = header.createDiv({ cls: "tradenote-viewpoint-heading" });
+    heading.createEl("h3", { text: "整体观点" });
+    if (view.updated) {
+      const updated = new Date(view.updated);
+      heading.createSpan({ cls: "tradenote-muted", text: `大盘判断 · 更新于 ${dateString(updated).slice(5)} ${timeString(updated)}` });
+    } else {
+      heading.createSpan({ cls: "tradenote-muted", text: "大盘判断" });
+    }
+    const actions = header.createDiv({ cls: "tradenote-viewpoint-actions" });
+    this.iconButton(actions, "square-pen", "编辑整体观点", () => new MarketViewModal(this.app, this.plugin, view.text).open());
+    this.iconButton(actions, "arrow-up-right", "打开整体观点笔记", () => void this.plugin.openMarketView());
+    const card = panel.createDiv({ cls: "tradenote-viewpoint" });
+    const body = card.createDiv({ cls: `tradenote-viewpoint-body${view.text ? "" : " is-empty"}`, text: view.text || "还没有记录整体观点。点击右上角的编辑按钮，写下当前对大盘的判断。" });
+    body.setAttribute("aria-label", view.text ? "当前整体观点" : "整体观点尚未记录");
+  }
+
+  private renderMarketFeelPanel(parent: HTMLElement, records: MarketFeelRecord[]): void {
+    const today = dateString();
+    const visible = records.filter(record => this.plugin.isMarketFeelTradingDay(record.date));
+    const todayRecord = visible.find(record => record.date === today);
+    const aTrading = this.plugin.isTradingDay(today);
+    const usTrading = this.plugin.isUsTradingDay(today);
+    const tradingToday = aTrading || usTrading;
+    const panel = parent.createDiv({ cls: "tradenote-feel-panel" });
+    const header = panel.createDiv({ cls: "tradenote-feel-header" });
+    const heading = header.createDiv({ cls: "tradenote-feel-heading" });
+    heading.createEl("h3", { text: "大盘体感" });
+    const summary = this.marketFeelSummary(visible);
+    const closedToday = [aTrading ? "" : "A股", usTrading ? "" : "美股"].filter(Boolean);
+    const closedNote = tradingToday && visible.length && closedToday.length ? `${closedToday.join("、")}休市 · ` : "";
+    heading.createSpan({ cls: "tradenote-muted", text: tradingToday ? `${closedNote}${summary}` : "今日休市，无需记录" });
+    const actions = header.createDiv({ cls: "tradenote-feel-actions" });
+    if (tradingToday || todayRecord) {
+      const record = actions.createEl("button", { cls: "tradenote-feel-record", text: todayRecord ? "编辑今日体感" : "记录今日体感", attr: { type: "button" } });
+      record.addEventListener("click", () => new MarketFeelModal(this.app, this.plugin, today, todayRecord).open());
+    }
+    this.iconButton(actions, "calendar-plus", "补录往日体感", () => new MarketFeelDateModal(this.app, this.plugin).open());
+    if (!visible.length) { panel.createDiv({ cls: "tradenote-empty tradenote-feel-empty", text: "还没有记录大盘体感。记录交易日对 A股和美股的整体感受，方便回看和统计。" }); return; }
+    const list = panel.createDiv({ cls: "tradenote-feel-list" });
+    for (const item of visible.slice(0, 5)) this.renderMarketFeelRow(list, item, today);
+  }
+
+  private marketFeelSummary(records: MarketFeelRecord[]): string {
+    if (!records.length) return "记录每日 A股 / 美股体感";
+    const parts: string[] = [];
+    for (const side of ["a", "us"] as const) {
+      const sideRecords = records.filter(record => side === "a" ? this.plugin.isTradingDay(record.date) : this.plugin.isUsTradingDay(record.date));
+      const average = averageMarketFeel(sideRecords, side, 5);
+      if (average !== null) parts.push(`${MARKET_FEEL_HEADINGS[side]} ${average.toFixed(1)}`);
+    }
+    return parts.length ? `近${Math.min(records.length, 5)}次 ${parts.join(" · ")}` : "记录每日 A股 / 美股体感";
+  }
+
+  private renderMarketFeelRow(parent: HTMLElement, record: MarketFeelRecord, today: string): void {
+    const row = parent.createEl("button", { cls: `tradenote-feel-row${record.date === today ? " is-today" : ""}`, attr: { type: "button", "aria-label": `编辑 ${record.date} 的大盘体感` } });
+    row.createSpan({ cls: "tradenote-feel-date", text: `${record.date.slice(5)} ${eventWeekday(record.date)}` });
+    for (const side of ["a", "us"] as const) {
+      const cell = row.createDiv({ cls: "tradenote-feel-side" });
+      cell.createSpan({ cls: "tradenote-feel-market", text: MARKET_FEEL_HEADINGS[side] });
+      const trading = side === "a" ? this.plugin.isTradingDay(record.date) : this.plugin.isUsTradingDay(record.date);
+      if (trading) this.renderMarketFeelMeter(cell, record[side].score, MARKET_FEEL_HEADINGS[side]);
+      else cell.createSpan({ cls: "tradenote-feel-closed", text: "休市" });
+    }
+    const note = [
+      this.plugin.isTradingDay(record.date) && record.a.note ? `A：${record.a.note}` : "",
+      this.plugin.isUsTradingDay(record.date) && record.us.note ? `美：${record.us.note}` : "",
+    ].filter(Boolean).join("  ");
+    row.createSpan({ cls: "tradenote-feel-note", text: note ? excerpt(note) : "未写文字" });
+    row.addEventListener("click", () => new MarketFeelModal(this.app, this.plugin, record.date, record).open());
+  }
+
+  private renderMarketFeelMeter(parent: HTMLElement, score: number, label: string): void {
+    const meter = parent.createSpan({ cls: "tradenote-feel-meter", attr: { "aria-label": score ? `${label} ${score} 分` : `${label}未评分` } });
+    for (let index = 1; index <= 5; index++) meter.createSpan({ cls: index <= score ? "is-filled" : "" });
+    meter.createSpan({ cls: "tradenote-feel-value", text: score ? String(score) : "–" });
   }
 
   private renderCountdownRow(parent: HTMLElement, event: EventRecord, today: string): void {
@@ -824,30 +1132,33 @@ class StockReviewDashboardView extends ItemView {
     heading.createEl("h3", { text: "复盘资料库" });
     const headerControls = header.createDiv({ cls: "tradenote-library-header-controls" });
     const search = headerControls.createEl("input", { type: "search", value: this.query, placeholder: "搜索日期或正文", cls: "tradenote-search", attr: { "aria-label": "搜索复盘" } });
-    search.addEventListener("input", (event) => { const inputEvent = event as UIEvent; if (inputEvent.instanceOf(InputEvent) && inputEvent.isComposing) return; this.query = search.value.toLowerCase().trim(); this.resultLimit = 40; void this.render(); });
-    search.addEventListener("compositionend", () => { this.query = search.value.toLowerCase().trim(); this.resultLimit = 40; void this.render(); });
+    search.addEventListener("input", (event) => { const inputEvent = event as UIEvent; if (inputEvent.instanceOf(InputEvent) && inputEvent.isComposing) return; this.query = search.value.toLowerCase().trim(); this.resultLimit = 5; void this.render(); });
+    search.addEventListener("compositionend", () => { this.query = search.value.toLowerCase().trim(); this.resultLimit = 5; void this.render(); });
     const sort = headerControls.createEl("select", { cls: "tradenote-sort", attr: { "aria-label": "排序方式" } });
     for (const [value, label] of [["date-descending", "日期新到旧"], ["date-ascending", "日期旧到新"], ["modified-descending", "修改新到旧"], ["modified-ascending", "修改旧到新"]]) sort.createEl("option", { text: label, value });
     sort.value = `${this.sortBy}-${this.sortDirection}`;
-    sort.addEventListener("change", () => { const [by, direction] = sort.value.split("-"); this.sortBy = by === "modified" ? "modified" : "date"; this.sortDirection = direction === "ascending" ? "ascending" : "descending"; this.resultLimit = 40; void this.render(); });
+    sort.addEventListener("change", () => { const [by, direction] = sort.value.split("-"); this.sortBy = by === "modified" ? "modified" : "date"; this.sortDirection = direction === "ascending" ? "ascending" : "descending"; this.resultLimit = 5; void this.render(); });
+    const start = headerControls.createEl("button", { cls: "mod-cta tradenote-review-start", text: "开始复盘", attr: { type: "button", "aria-label": "开始或继续今日复盘" } });
+    start.addEventListener("click", () => void this.plugin.openDailyFocus());
+    this.iconButton(headerControls, "calendar-days", "选择复盘日期", () => this.openBackfillModal());
     const toolbar = panel.createDiv({ cls: "tradenote-index-toolbar" });
     const quick = toolbar.createDiv({ cls: "tradenote-quick-filters" });
     quick.createSpan({ cls: "tradenote-filter-label", text: "范围" });
     const quickSelect = quick.createEl("select", { attr: { "aria-label": "复盘范围" } });
     for (const [key, label] of [["all", "全部"], ["month", "当前月"], ["today", "今日"]] as Array<[QuickFilter, string]>) quickSelect.createEl("option", { text: label, value: key });
     quickSelect.value = this.quickFilter;
-    quickSelect.addEventListener("change", () => { this.quickFilter = quickSelect.value as QuickFilter; this.resultLimit = 40; void this.render(); });
+    quickSelect.addEventListener("change", () => { this.quickFilter = quickSelect.value as QuickFilter; this.resultLimit = 5; void this.render(); });
     const sectionFilters = toolbar.createDiv({ cls: "tradenote-section-filters" });
     sectionFilters.createSpan({ cls: "tradenote-filter-label", text: "板块" });
     const sectionSelect = sectionFilters.createEl("select", { attr: { "aria-label": "复盘板块" } });
     for (const filter of ["全部", ...SECTIONS] as const) sectionSelect.createEl("option", { text: filter, value: filter });
     sectionSelect.value = this.sectionFilter;
-    sectionSelect.addEventListener("change", () => { this.sectionFilter = sectionSelect.value as "全部" | Section; this.sectionPresence = "written"; this.resultLimit = 40; void this.render(); });
+    sectionSelect.addEventListener("change", () => { this.sectionFilter = sectionSelect.value as "全部" | Section; this.sectionPresence = "written"; this.resultLimit = 5; void this.render(); });
     if (this.sectionFilter !== "全部") {
       const presence = toolbar.createDiv({ cls: "tradenote-presence-filter" });
       for (const [key, label] of [["written", "已写"], ["missing", "未写"]] as Array<[SectionPresence, string]>) {
         const button = presence.createEl("button", { text: label, cls: key === this.sectionPresence ? "is-active" : "", attr: { type: "button" } });
-        button.addEventListener("click", () => { this.sectionPresence = key; this.resultLimit = 40; void this.render(); });
+        button.addEventListener("click", () => { this.sectionPresence = key; this.resultLimit = 5; void this.render(); });
       }
     }
     sectionFilters.createSpan({ cls: "tradenote-filter-label", text: "标签" });
@@ -857,12 +1168,12 @@ class StockReviewDashboardView extends ItemView {
     tagSelect.createEl("option", { text: "全部标签", value: "" });
     for (const tag of availableTags) tagSelect.createEl("option", { text: `#${tag}`, value: tag.toLowerCase() });
     tagSelect.value = this.tagFilter;
-    tagSelect.addEventListener("change", () => { this.tagFilter = tagSelect.value; this.resultLimit = 40; void this.render(); });
+    tagSelect.addEventListener("change", () => { this.tagFilter = tagSelect.value; this.resultLimit = 5; void this.render(); });
     const entries = allEntries.filter((entry) => this.matchesFilters(entry)).sort((left, right) => { const comparison = this.sortBy === "modified" ? left.file.stat.mtime - right.file.stat.mtime : left.date.localeCompare(right.date); return this.sortDirection === "ascending" ? comparison : -comparison; });
     const hasFilters = this.query.length > 0 || this.quickFilter !== "all" || this.sectionFilter !== "全部" || this.sectionPresence !== "written" || this.tagFilter.length > 0 || this.sortBy !== "date" || this.sortDirection !== "descending";
     if (hasFilters) {
       const clear = toolbar.createEl("button", { cls: "tradenote-clear-filters", text: "清除", attr: { type: "button", "aria-label": "清除筛选条件" } });
-      clear.addEventListener("click", () => { this.query = ""; this.quickFilter = "all"; this.sectionFilter = "全部"; this.sectionPresence = "written"; this.tagFilter = ""; this.sortBy = "date"; this.sortDirection = "descending"; this.resultLimit = 40; void this.render(); });
+      clear.addEventListener("click", () => { this.query = ""; this.quickFilter = "all"; this.sectionFilter = "全部"; this.sectionPresence = "written"; this.tagFilter = ""; this.sortBy = "date"; this.sortDirection = "descending"; this.resultLimit = 5; void this.render(); });
     }
     const list = panel.createDiv({ cls: "tradenote-index-list" });
     if (!entries.length) { list.createDiv({ cls: "tradenote-empty", text: "没有找到匹配的复盘。" }); return; }
@@ -870,7 +1181,7 @@ class StockReviewDashboardView extends ItemView {
     for (const entry of entries.slice(0, this.resultLimit)) this.renderReviewRow(list, entry);
     if (entries.length > this.resultLimit) {
       const more = panel.createEl("button", { cls: "tradenote-load-more", text: `显示更多（还有 ${entries.length - this.resultLimit} 篇）`, attr: { type: "button" } });
-      more.addEventListener("click", () => { this.resultLimit += 40; void this.render(); });
+      more.addEventListener("click", () => { this.resultLimit += 5; void this.render(); });
     }
   }
 
@@ -905,7 +1216,7 @@ class StockReviewDashboardView extends ItemView {
       const open = row.createEl("button", { cls: "tradenote-quick-date", text: `${note.date}${note.time ? ` ${note.time}` : ""}`, attr: { type: "button", "aria-label": `打开 ${note.date}${note.time ? ` ${note.time}` : ""} 的随手记` } });
       open.addEventListener("click", () => void this.plugin.openQuickNoteAt(note.file, note.time));
       const body = row.createDiv({ cls: "tradenote-quick-body" });
-      body.createSpan({ cls: "tradenote-quick-text", text: excerpt(quickNoteBody(note.text)) });
+      body.createSpan({ cls: "tradenote-quick-text", text: quickNoteBody(note.text) });
       if (note.tags.length) {
         const tags = body.createDiv({ cls: "tradenote-quick-tags-list" });
         for (const tag of note.tags) tags.createSpan({ cls: "tradenote-quick-tag-label", text: `#${tag}` });
@@ -939,13 +1250,13 @@ class StockReviewDashboardView extends ItemView {
       if (this.sectionFilter !== "全部" && this.sectionPresence === "missing") void this.plugin.openReviewSection(entry.file, this.sectionFilter);
       else void this.plugin.openFile(entry.file);
     });
-    const body = row.createDiv({ cls: `tradenote-index-body${this.plugin.settings.summaryOneLine ? " is-single-line" : " is-multiline"}` }), visibleSections: readonly Section[] = (this.sectionFilter === "全部" ? SECTIONS : [this.sectionFilter]).filter(section => !this.tagFilter || extractTags(entry.sections[section]).some(tag => tag.toLowerCase() === this.tagFilter));
+    const body = row.createDiv({ cls: "tradenote-index-body" }), visibleSections: readonly Section[] = (this.sectionFilter === "全部" ? SECTIONS : [this.sectionFilter]).filter(section => !this.tagFilter || extractTags(entry.sections[section]).some(tag => tag.toLowerCase() === this.tagFilter));
     for (const section of visibleSections) {
       const value = entry.sections[section];
       if (!value) continue;
       const line = body.createEl("button", { cls: "tradenote-index-excerpt", attr: { type: "button", "aria-label": `打开 ${entry.date} 的${section}` } });
       line.createSpan({ cls: "tradenote-index-section", text: section });
-      line.createSpan({ cls: "tradenote-index-summary", text: excerpt(value) });
+      line.createSpan({ cls: "tradenote-index-summary", text: reviewBodyText(value) });
       line.addEventListener("click", () => void this.plugin.openReviewSection(entry.file, section));
     }
     if (!body.childElementCount) body.createSpan({ cls: "tradenote-muted", text: this.tagFilter ? "该标签不在板块内" : this.sectionFilter === "全部" ? "各板块尚无正文" : `未填写${this.sectionFilter}` });
@@ -954,17 +1265,6 @@ class StockReviewDashboardView extends ItemView {
     const remove = actions.createEl("button", { cls: "tradenote-delete-icon", attr: { type: "button", "aria-label": `删除 ${entry.date} 的复盘及附件`, title: `删除 ${entry.date} 的复盘及附件` } });
     setIcon(remove, "trash-2");
     remove.addEventListener("click", () => this.deleteReview(entry));
-  }
-
-  private async openCalendarDate(date: string): Promise<void> {
-    try {
-      const existed = this.plugin.hasDailyReview(date);
-      await this.plugin.openDaily(date);
-      new Notice(existed ? `已打开 ${date} 的复盘` : `已创建并打开 ${date} 的复盘`);
-    } catch (error) {
-      console.error(`Failed to open calendar review for ${date}`, error);
-      new Notice(`无法打开 ${date} 的复盘，请检查复盘目录设置`);
-    }
   }
 
   private openBackfillModal(): void { new BackfillReviewModal(this.app, (date) => this.plugin.openDaily(date)).open(); }
@@ -984,16 +1284,6 @@ class StockReviewDashboardView extends ItemView {
     };
     if (this.plugin.settings.confirmDelete) new DeleteReviewModal(this.app, entry, remove).open();
     else void remove();
-  }
-
-  private async copyPreviousPlan(plan: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(plan);
-      new Notice("上一份明日计划已复制");
-    } catch (error) {
-      console.error("Failed to copy previous plan", error);
-      new Notice("无法复制计划，请手动打开原复盘");
-    }
   }
 
   private iconButton(parent: HTMLElement, iconName: string, label: string, action: () => void, cta = false): void { const button = parent.createEl("button", { cls: `${cta ? "mod-cta " : ""}clickable-icon`, attr: { type: "button", "aria-label": label, title: label } }); setIcon(button, iconName); button.addEventListener("click", action); }
@@ -1017,6 +1307,8 @@ export default class StockReviewPlugin extends Plugin {
     this.registerView(DASHBOARD_VIEW_TYPE, (leaf) => new StockReviewDashboardView(leaf, this));
     this.registerView(EVENTS_VIEW_TYPE, (leaf) => new StockReviewEventsView(leaf, this));
     this.registerView(EVENT_DRIVEN_VIEW_TYPE, (leaf) => new StockReviewEventDrivenView(leaf, this));
+    this.registerView(TRACKS_VIEW_TYPE, (leaf) => new StockReviewTracksView(leaf, this));
+    this.registerView(SYSTEM_VIEW_TYPE, (leaf) => new StockReviewSystemView(leaf, this));
     this.addRibbonIcon("chart-candlestick", "打开复盘仪表盘", () => void this.openDashboard());
     this.addRibbonIcon("square-pen", "随手记一条", () => new QuickNoteModal(this.app, this).open());
     this.addRibbonIcon("hourglass", "大事倒计时", () => void this.openEvents());
@@ -1028,6 +1320,12 @@ export default class StockReviewPlugin extends Plugin {
     this.addCommand({ id: "open-quick-note", name: "打开今日随手记", callback: () => void this.openQuickNote() });
     this.addCommand({ id: "open-events", name: "打开大事倒计时", callback: () => void this.openEvents() });
     this.addCommand({ id: "open-event-driven", name: "打开事件驱动记录", callback: () => void this.openEventDriven() });
+    this.addCommand({ id: "open-tracks", name: "打开跟踪笔记", callback: () => void this.openTracks() });
+    this.addCommand({ id: "new-track", name: "新建跟踪笔记", callback: () => new TrackModal(this.app, this).open() });
+    this.addCommand({ id: "open-trade-system", name: "打开交易系统", callback: () => void this.openSystem() });
+    this.addCommand({ id: "new-system-pattern", name: "新建交易模式", callback: () => new SystemModal(this.app, this).open() });
+    this.addCommand({ id: "record-market-feel", name: "记录大盘体感", callback: () => void this.openMarketFeel() });
+    this.addCommand({ id: "backfill-market-feel", name: "补录往日大盘体感", callback: () => new MarketFeelDateModal(this.app, this).open() });
     this.addCommand({ id: "insert-review-tag", name: "插入复盘标签", editorCallback: (editor, info) => {
       if (!info.file || !this.isDailyReview(info.file)) { new Notice("请在日报复盘中插入标签"); return; }
       this.openReviewTagPicker(editor);
@@ -1138,6 +1436,8 @@ export default class StockReviewPlugin extends Plugin {
   async refreshDashboards(): Promise<void> { for (const leaf of this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE)) { await leaf.loadIfDeferred(); if (leaf.view instanceof StockReviewDashboardView) await leaf.view.refresh(); } }
   dailyFolderPath(): string { return joinPath(this.settings.rootFolder, this.settings.dailyFolder); }
   isTradingDay(date: string): boolean { return isChinaTradingDay(date); }
+  isUsTradingDay(date: string): boolean { return isUsMarketTradingDay(date); }
+  isMarketFeelTradingDay(date: string): boolean { return this.isTradingDay(date) || isUsMarketTradingDay(date); }
   attachmentRootPath(): string { return joinPath(this.settings.rootFolder, this.settings.attachmentFolder); }
   quickFolderPath(): string { return joinPath(this.settings.rootFolder, this.settings.quickFolder); }
   quickNotePath(date: string): string { return joinPath(this.quickFolderPath(), date.slice(0, 4), date.slice(5, 7), `${date}.md`); }
@@ -1227,6 +1527,123 @@ export default class StockReviewPlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
   }
   eventDrivenFolderPath(): string { return joinPath(this.settings.rootFolder, this.settings.eventDrivenFolder); }
+  marketViewPath(): string { return joinPath(this.settings.rootFolder, "整体观点.md"); }
+  async getMarketView(): Promise<MarketViewRecord> {
+    const current = this.app.vault.getAbstractFileByPath(this.marketViewPath());
+    if (!(current instanceof TFile)) return { file: null, text: "", updated: null };
+    const text = await this.app.vault.cachedRead(current);
+    return { file: current, text: marketViewBody(text), updated: current.stat.mtime };
+  }
+  private async ensureMarketViewFile(): Promise<TFile> {
+    const current = this.app.vault.getAbstractFileByPath(this.marketViewPath());
+    if (current instanceof TFile) return current;
+    await this.ensureFolder(this.settings.rootFolder);
+    return this.app.vault.create(this.marketViewPath(), marketViewTemplate());
+  }
+  async saveMarketView(text: string): Promise<TFile> {
+    const current = this.app.vault.getAbstractFileByPath(this.marketViewPath());
+    if (!(current instanceof TFile)) {
+      await this.ensureFolder(this.settings.rootFolder);
+      const file = await this.app.vault.create(this.marketViewPath(), updateMarketView(marketViewTemplate(), text));
+      await this.refreshDashboards();
+      return file;
+    }
+    await this.app.vault.process(current, data => updateMarketView(data, text));
+    await this.refreshDashboards();
+    return current;
+  }
+  async openMarketView(): Promise<void> {
+    await this.openFile(await this.ensureMarketViewFile());
+  }
+  async openMarketFeel(date = dateString()): Promise<void> {
+    if (!isValidDate(date)) { new Notice("无效的体感日期"); return; }
+    const current = this.app.vault.getAbstractFileByPath(this.marketFeelPath(date));
+    if (!(current instanceof TFile) && !this.isMarketFeelTradingDay(date)) { new Notice("该日期 A股和美股都休市，无需记录"); return; }
+    const records = await this.getMarketFeels();
+    new MarketFeelModal(this.app, this, date, records.find(record => record.date === date)).open();
+  }
+  marketFeelFolderPath(): string { return joinPath(this.settings.rootFolder, this.settings.marketFeelFolder); }
+  marketFeelPath(date: string): string { return joinPath(this.marketFeelFolderPath(), date.slice(0, 4), date.slice(5, 7), `${date}.md`); }
+  async getMarketFeels(): Promise<MarketFeelRecord[]> {
+    const prefix = `${this.marketFeelFolderPath()}/`;
+    const files = this.app.vault.getMarkdownFiles().filter(file => file.path.startsWith(prefix) && /^\d{4}-\d{2}-\d{2}\.md$/.test(file.name));
+    const records: MarketFeelRecord[] = [];
+    for (const file of files) {
+      const date = file.name.slice(0, 10);
+      if (!isValidDate(date)) continue;
+      const text = await this.app.vault.cachedRead(file);
+      records.push({ file, date, ...parseMarketFeelNote(text) });
+    }
+    return records.sort((left, right) => right.date.localeCompare(left.date));
+  }
+  async saveMarketFeel(date: string, sides: MarketFeelSides): Promise<TFile> {
+    if (!isValidDate(date)) throw new Error("无效的体感日期");
+    const a = { score: normalizeMarketFeelScore(sides.a.score), note: sides.a.note.trim() };
+    const us = { score: normalizeMarketFeelScore(sides.us.score), note: sides.us.note.trim() };
+    if (!a.score && !a.note && !us.score && !us.note) throw new Error("请至少记录 A股或美股的一项内容");
+    const current = this.app.vault.getAbstractFileByPath(this.marketFeelPath(date));
+    if (!(current instanceof TFile) && !this.isMarketFeelTradingDay(date)) throw new Error("A股和美股都休市，无需记录");
+    if (!(current instanceof TFile)) {
+      await this.ensureFolder(joinPath(this.marketFeelFolderPath(), date.slice(0, 4), date.slice(5, 7)));
+      const file = await this.app.vault.create(this.marketFeelPath(date), updateMarketFeelNote(marketFeelTemplate(date), date, { a, us }));
+      await this.refreshDashboards();
+      return file;
+    }
+    await this.app.vault.process(current, data => updateMarketFeelNote(data, date, { a, us }));
+    await this.refreshDashboards();
+    return current;
+  }
+  trackFolderPath(): string { return joinPath(this.settings.rootFolder, this.settings.trackFolder); }
+  async getTracks(): Promise<TrackRecord[]> {
+    const prefix = `${this.trackFolderPath()}/`;
+    const files = this.app.vault.getMarkdownFiles().filter(file => file.path.startsWith(prefix));
+    const records: TrackRecord[] = [];
+    for (const file of files) {
+      const text = await this.app.vault.cachedRead(file);
+      records.push({ file, ...parseTrack(text, file.basename) });
+    }
+    return records.sort((left, right) => (right.file.stat?.mtime ?? 0) - (left.file.stat?.mtime ?? 0) || left.title.localeCompare(right.title, "zh-CN"));
+  }
+  private async trackPath(created: string, title: string): Promise<string> {
+    const folder = joinPath(this.trackFolderPath(), created.slice(0, 4), created.slice(5, 7));
+    const base = `${created}-${eventSlug(title)}`;
+    let path = joinPath(folder, `${base}.md`);
+    let index = 2;
+    while (this.app.vault.getAbstractFileByPath(path)) path = joinPath(folder, `${base}-${index++}.md`);
+    return path;
+  }
+  async createTrack(title: string): Promise<TFile> {
+    const name = normalizeEventTitle(title);
+    if (!name) throw new Error("请输入笔记标题");
+    const created = dateString();
+    const path = await this.trackPath(created, name);
+    await this.ensureFolder(joinPath(this.trackFolderPath(), created.slice(0, 4), created.slice(5, 7)));
+    return this.app.vault.create(path, trackTemplate(name));
+  }
+  systemFolderPath(): string { return joinPath(this.settings.rootFolder, this.settings.systemFolder); }
+  async getSystemPatterns(): Promise<SystemRecord[]> {
+    const prefix = `${this.systemFolderPath()}/`;
+    const files = this.app.vault.getMarkdownFiles().filter(file => file.path.startsWith(prefix));
+    const records: SystemRecord[] = [];
+    for (const file of files) {
+      const text = await this.app.vault.cachedRead(file);
+      records.push({ file, ...parseSystemNote(text, file.basename) });
+    }
+    return records.sort((left, right) => left.title.localeCompare(right.title, "zh-CN"));
+  }
+  private async systemPath(title: string): Promise<string> {
+    const base = eventSlug(title);
+    let path = joinPath(this.systemFolderPath(), `${base}.md`);
+    let index = 2;
+    while (this.app.vault.getAbstractFileByPath(path)) path = joinPath(this.systemFolderPath(), `${base}-${index++}.md`);
+    return path;
+  }
+  async createSystemPattern(title: string): Promise<TFile> {
+    const name = normalizeEventTitle(title);
+    if (!name) throw new Error("请输入模式名称");
+    await this.ensureFolder(this.systemFolderPath());
+    return this.app.vault.create(await this.systemPath(name), systemTemplate(name, dateString()));
+  }
   async getEventDrivenRecords(): Promise<EventDrivenRecord[]> {
     const prefix = `${this.eventDrivenFolderPath()}/`;
     const files = this.app.vault.getMarkdownFiles().filter(file => file.path.startsWith(prefix));
@@ -1264,9 +1681,25 @@ export default class StockReviewPlugin extends Plugin {
     await leaf.setViewState({ type: EVENT_DRIVEN_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
   }
+  async openTracks(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(TRACKS_VIEW_TYPE)[0];
+    if (existing) { await existing.loadIfDeferred(); if (existing.view instanceof StockReviewTracksView) await existing.view.refresh(); await this.app.workspace.revealLeaf(existing); return; }
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.setViewState({ type: TRACKS_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+  }
+  async openSystem(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(SYSTEM_VIEW_TYPE)[0];
+    if (existing) { await existing.loadIfDeferred(); if (existing.view instanceof StockReviewSystemView) await existing.view.refresh(); await this.app.workspace.revealLeaf(existing); return; }
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.setViewState({ type: SYSTEM_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+  }
   async refreshEventViews(): Promise<void> { for (const leaf of this.app.workspace.getLeavesOfType(EVENTS_VIEW_TYPE)) { await leaf.loadIfDeferred(); if (leaf.view instanceof StockReviewEventsView) await leaf.view.refresh(); } }
   async refreshEventDrivenViews(): Promise<void> { for (const leaf of this.app.workspace.getLeavesOfType(EVENT_DRIVEN_VIEW_TYPE)) { await leaf.loadIfDeferred(); if (leaf.view instanceof StockReviewEventDrivenView) await leaf.view.refresh(); } }
-  async refreshViews(): Promise<void> { await this.refreshDashboards(); await this.refreshEventViews(); await this.refreshEventDrivenViews(); }
+  async refreshTracksViews(): Promise<void> { for (const leaf of this.app.workspace.getLeavesOfType(TRACKS_VIEW_TYPE)) { await leaf.loadIfDeferred(); if (leaf.view instanceof StockReviewTracksView) await leaf.view.refresh(); } }
+  async refreshSystemViews(): Promise<void> { for (const leaf of this.app.workspace.getLeavesOfType(SYSTEM_VIEW_TYPE)) { await leaf.loadIfDeferred(); if (leaf.view instanceof StockReviewSystemView) await leaf.view.refresh(); } }
+  async refreshViews(): Promise<void> { await this.refreshDashboards(); await this.refreshEventViews(); await this.refreshEventDrivenViews(); await this.refreshTracksViews(); await this.refreshSystemViews(); }
   async deleteAttachmentsForDate(date: string): Promise<void> {
     const folder = this.app.vault.getAbstractFileByPath(this.attachmentFolderPath(date));
     if (!(folder instanceof TFolder)) return;
@@ -1384,7 +1817,7 @@ export default class StockReviewPlugin extends Plugin {
     window.clearTimeout(this.refreshTimer);
     this.refreshTimer = window.setTimeout(() => void this.refreshViews(), 300);
   }
-  private isReviewRelatedPath(path: string): boolean { return path.startsWith(`${this.dailyFolderPath()}/`) || path.startsWith(`${this.attachmentRootPath()}/`) || path.startsWith(`${this.quickFolderPath()}/`) || path.startsWith(`${this.eventFolderPath()}/`) || path.startsWith(`${this.eventDrivenFolderPath()}/`); }
+  private isReviewRelatedPath(path: string): boolean { return path === this.marketViewPath() || path.startsWith(`${this.dailyFolderPath()}/`) || path.startsWith(`${this.attachmentRootPath()}/`) || path.startsWith(`${this.quickFolderPath()}/`) || path.startsWith(`${this.eventFolderPath()}/`) || path.startsWith(`${this.eventDrivenFolderPath()}/`) || path.startsWith(`${this.marketFeelFolderPath()}/`) || path.startsWith(`${this.trackFolderPath()}/`) || path.startsWith(`${this.systemFolderPath()}/`); }
   private attachmentFolderPath(date: string): string { return joinPath(this.attachmentRootPath(), date.slice(0, 4), date.slice(5, 7), date.slice(8, 10)); }
   private async insertPastedImage(image: File, editor: { replaceSelection(value: string): void }, sourceFile: TFile): Promise<void> { await this.insertReviewImage(image, editor, sourceFile); }
   private async insertReviewImage(image: File, editor: { replaceSelection(value: string): void }, sourceFile: TFile): Promise<void> {

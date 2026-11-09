@@ -19,14 +19,14 @@ export function eventSlug(title: string): string {
     .slice(0, 48) || "事件";
 }
 
-function frontmatterField(markdown: string, key: string): string {
+export function frontmatterField(markdown: string, key: string): string {
   const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown);
   if (!front) return "";
   const line = front[1].split(/\r?\n/).find(value => new RegExp(`^${key}\\s*:`).test(value));
   return line ? line.replace(new RegExp(`^${key}\\s*:\\s*`), "").trim().replace(/^["']|["']$/g, "") : "";
 }
 
-function updateFrontmatter(markdown: string, fields: Record<string, string>): string {
+export function updateFrontmatter(markdown: string, fields: Record<string, string>): string {
   const keys = Object.keys(fields);
   const written = Object.entries(fields).filter(([, value]) => value).map(([key, value]) => `${key}: "${value}"`);
   if (/^---\r?\n[\s\S]*?\r?\n---/.test(markdown)) {
@@ -38,7 +38,7 @@ function updateFrontmatter(markdown: string, fields: Record<string, string>): st
   return `---\n${written.join("\n")}\n---\n\n${markdown}`;
 }
 
-function setTitle(markdown: string, title: string): string {
+export function setTitle(markdown: string, title: string): string {
   const name = normalizeEventTitle(title);
   if (/^#\s+.*$/m.test(markdown)) return markdown.replace(/^#\s+.*$/m, `# ${name}`);
   const front = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(markdown);

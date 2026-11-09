@@ -24,13 +24,13 @@ class MockSetting {
 let request = async () => { throw new Error('Unexpected network request'); };
 const obsidian = { App: class {}, ItemView: class {}, MarkdownView: class {}, Modal: class {}, Notice: class { constructor(message) { notices.push(message); } }, Plugin: class {}, PluginSettingTab: class {}, Setting: MockSetting, SuggestModal: class { constructor() {} setPlaceholder() {} }, requireApiVersion: () => supportsDeclarative, TFile, TFolder, normalizePath: s => s.replace(/\\/g, '/'), requestUrl: (...args) => request(...args), setIcon() {} };
 const modules = {};
-for (const name of ['market-calendar', 'review-analysis', 'review-tags', 'quick-notes', 'markdown-sections', 'events']) {
+for (const name of ['market-calendar', 'review-analysis', 'review-tags', 'quick-notes', 'markdown-sections', 'events', 'market-view', 'market-feel', 'tracks', 'trade-system']) {
   const moduleContext = { exports: {}, require: specifier => modules[specifier] };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(`src/${name}.ts`, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, moduleContext);
   modules[`./${name}`] = moduleContext.exports;
 }
 const context = { exports: {}, require: name => name === 'obsidian' ? obsidian : modules[name], console, Date, Map, Set, URL, URLSearchParams, window: { setTimeout, clearTimeout, setInterval: () => 0 } };
-const source = fs.readFileSync('src/main.ts', 'utf8') + '\nObject.assign(exports, { loadReviewSettings, StockReviewSettingTab, sectionText, StockReviewDashboardView });';
+const source = fs.readFileSync('src/main.ts', 'utf8') + '\nObject.assign(exports, { loadReviewSettings, StockReviewSettingTab, sectionText, reviewBodyText, StockReviewDashboardView });';
 vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, context);
 const api = context.exports;
 async function main() {
@@ -58,6 +58,9 @@ async function main() {
   assert.equal(defaults.eventDrivenFolder, '事件驱动');
   const drivenSettings = api.loadReviewSettings({ eventDrivenFolder: ' 盘后 ' });
   assert.equal(drivenSettings.eventDrivenFolder, '盘后');
+  assert.equal(defaults.marketFeelFolder, '大盘体感');
+  const feelSettings = api.loadReviewSettings({ marketFeelFolder: ' 体感 ' });
+  assert.equal(feelSettings.marketFeelFolder, '体感');
   const tagged = api.loadReviewSettings({ reviewTags: ['#救市政策', '救市政策', '来源/北漠海', 42, '含 空格'] });
   assert.equal(tagged.reviewTags.join(','), '救市政策,来源/北漠海');
   tagged.reviewTags.push('临时');
@@ -98,6 +101,11 @@ async function main() {
   assert.equal(api.sectionText(markdown, '今日操作'), '买入');
   assert.equal(api.sectionText('# A股市场\n\n# 今日操作\n正文', 'A股市场'), '');
   assert.equal(api.sectionText('## 明日计划\r\n\r\n计划一\r\n计划二', '明日计划'), '计划一\n计划二');
+  const bodyText = api.reviewBodyText('第一行\n第二行 ![[a.png]] [链接](https://example.com)');
+  assert.match(bodyText, /第一行\n第二行/);
+  assert.doesNotMatch(bodyText, /a\.png|https:/);
+  assert.match(bodyText, /链接/);
+  assert.equal(api.reviewBodyText('字'.repeat(200)).length, 200);
   const tagApi = modules['./review-tags'];
   assert.equal(tagApi.extractTags('# A股市场\n降准 #救市政策 #来源/北漠海').join(','), '救市政策,来源/北漠海');
   assert.equal(tagApi.extractTags('```\n#代码标签\n```\n正文 #保留').join(','), '保留');
@@ -153,6 +161,130 @@ async function main() {
   assert.equal(eventApi.eventWeekday('2026-11-06'), '周五');
   assert.equal(eventApi.eventWeekday('2026-11-09'), '周一');
   assert.equal(eventApi.eventSlug('美联储：议息/会议?'), '美联储：议息会议');
+  const viewApi = modules['./market-view'];
+  const emptyView = viewApi.marketViewTemplate();
+  assert.match(emptyView, /^# 整体观点/);
+  let viewNote = viewApi.updateMarketView(emptyView, '最近两个月按反弹对待');
+  assert.match(viewNote, /^# 整体观点\n\n最近两个月按反弹对待\n$/);
+  assert.equal(viewApi.marketViewBody(viewNote), '最近两个月按反弹对待');
+  viewNote = viewApi.updateMarketView(viewNote, '改为震荡市，等待放量');
+  assert.doesNotMatch(viewNote, /反弹/);
+  assert.equal(viewApi.marketViewBody(viewNote), '改为震荡市，等待放量');
+  assert.equal(viewApi.marketViewBody('# 整体观点\n\n直接写在标题下面'), '直接写在标题下面');
+  assert.equal(viewApi.marketViewBody('---\ntags: 观点\n---\n\n# 整体观点\n\n带 frontmatter'), '带 frontmatter');
+  assert.equal(viewApi.marketViewBody('# 整体观点\n\n## 小节\n\n正文'), '## 小节\n\n正文');
+  const viewPlugin = new api.default();
+  viewPlugin.settings = api.loadReviewSettings(null);
+  const marketFile = Object.assign(new TFile(), { path: '交易复盘/整体观点.md', name: '整体观点.md', basename: '整体观点', extension: 'md', stat: { mtime: 1762497600000 } });
+  let marketText = '# 整体观点\n\n最近两个月按反弹对待';
+  viewPlugin.app = { vault: { getAbstractFileByPath: path => path === marketFile.path ? marketFile : null, cachedRead: async () => marketText, process: async (_file, fn) => { marketText = fn(marketText); } } };
+  viewPlugin.refreshDashboards = async () => {};
+  const loadedView = await viewPlugin.getMarketView();
+  assert.equal(loadedView.text, '最近两个月按反弹对待');
+  assert.equal(loadedView.updated, marketFile.stat.mtime);
+  assert.equal(viewPlugin.marketViewPath(), '交易复盘/整体观点.md');
+  await viewPlugin.saveMarketView('改为震荡市');
+  assert.match(marketText, /改为震荡市/);
+  assert.doesNotMatch(marketText, /反弹/);
+  const feelApi = modules['./market-feel'];
+  const feelTemplate = feelApi.marketFeelTemplate('2026-11-07');
+  assert.match(feelTemplate, /# 2026-11-07 大盘体感/);
+  let feelNote = feelApi.updateMarketFeelNote(feelTemplate, '2026-11-07', { a: { score: 4, note: 'A股赚钱效应不错' }, us: { score: 2, note: '美股等待数据' } });
+  assert.match(feelNote, /## A股\n\n体感：4\/5\n\nA股赚钱效应不错/);
+  assert.match(feelNote, /## 美股\n\n体感：2\/5\n\n美股等待数据/);
+  const parsedFeel = feelApi.parseMarketFeelNote(feelNote);
+  assert.equal(parsedFeel.a.score, 4); assert.equal(parsedFeel.a.note, 'A股赚钱效应不错');
+  assert.equal(parsedFeel.us.score, 2); assert.equal(parsedFeel.us.note, '美股等待数据');
+  feelNote = feelApi.updateMarketFeelNote(feelNote, '2026-11-07', { a: { score: 0, note: '' }, us: { score: 5, note: '只更新美股' } });
+  assert.equal(feelApi.parseMarketFeelNote(feelNote).a.score, 0);
+  assert.equal(feelApi.parseMarketFeelNote(feelNote).us.score, 5);
+  assert.equal(feelApi.normalizeMarketFeelScore(3), 3);
+  assert.equal(feelApi.normalizeMarketFeelScore(0), 0);
+  assert.equal(feelApi.normalizeMarketFeelScore(6), 0);
+  assert.equal(feelApi.normalizeMarketFeelScore(3.5), 0);
+  const feelRecords = [
+    { a: { score: 4, note: '' }, us: { score: 2, note: '' } },
+    { a: { score: 2, note: '' }, us: { score: 5, note: '' } },
+    { a: { score: 0, note: '未评分' }, us: { score: 3, note: '' } },
+  ];
+  assert.equal(feelApi.averageMarketFeel(feelRecords, 'a', 5), 3);
+  assert.equal(feelApi.averageMarketFeel(feelRecords, 'us', 5), 10 / 3);
+  assert.equal(feelApi.averageMarketFeel(feelRecords, 'a', 1), 4);
+  assert.equal(feelApi.averageMarketFeel(feelRecords.slice(2), 'a', 5), null);
+  const feelPlugin = new api.default();
+  feelPlugin.settings = api.loadReviewSettings(null);
+  const feelFile = Object.assign(new TFile(), { path: '交易复盘/大盘体感/2026/11/2026-11-07.md', name: '2026-11-07.md', basename: '2026-11-07', extension: 'md' });
+  let feelText = feelApi.marketFeelTemplate('2026-11-07');
+  feelPlugin.app = { vault: {
+    getMarkdownFiles: () => [feelFile],
+    getAbstractFileByPath: path => path === feelFile.path ? feelFile : null,
+    cachedRead: async () => feelText,
+    process: async (_file, fn) => { feelText = fn(feelText); }
+  } };
+  feelPlugin.refreshDashboards = async () => {};
+  const loadedFeels = await feelPlugin.getMarketFeels();
+  assert.equal(loadedFeels.length, 1); assert.equal(loadedFeels[0].date, '2026-11-07');
+  assert.equal(feelPlugin.marketFeelPath('2026-11-07'), '交易复盘/大盘体感/2026/11/2026-11-07.md');
+  await feelPlugin.saveMarketFeel('2026-11-07', { a: { score: 4, note: 'A股不错' }, us: { score: 2, note: '' } });
+  assert.match(feelText, /体感：4\/5\n\nA股不错/);
+  await assert.rejects(feelPlugin.saveMarketFeel('2026-11-07', { a: { score: 0, note: '' }, us: { score: 0, note: '' } }), /至少/);
+  assert.equal(feelPlugin.isTradingDay('2026-11-06'), true);
+  assert.equal(feelPlugin.isUsTradingDay('2026-11-06'), true);
+  assert.equal(feelPlugin.isTradingDay('2026-10-01'), false);
+  assert.equal(feelPlugin.isUsTradingDay('2026-10-01'), true);
+  assert.equal(feelPlugin.isMarketFeelTradingDay('2026-10-01'), true);
+  assert.equal(feelPlugin.isMarketFeelTradingDay('2026-01-01'), false);
+  assert.equal(feelPlugin.isMarketFeelTradingDay('2026-11-08'), false);
+  await assert.rejects(feelPlugin.saveMarketFeel('2026-11-08', { a: { score: 4, note: '' }, us: { score: 0, note: '' } }), /休市/);
+  await assert.rejects(feelPlugin.saveMarketFeel('2026-01-01', { a: { score: 4, note: '' }, us: { score: 0, note: '' } }), /休市/);
+  const trackApi = modules['./tracks'];
+  assert.equal(trackApi.trackTemplate('救市政策'), '# 救市政策\n\n');
+  const parsedTrack = trackApi.parseTrack('# 救市政策\n\n第一段\n第二段', 'fallback');
+  assert.equal(parsedTrack.title, '救市政策');
+  assert.equal(parsedTrack.text, '第一段\n第二段');
+  const legacyTrack = trackApi.parseTrack('---\ncreated: "2026-11-08"\n---\n\n# 旧笔记\n\n旧内容', 'fallback');
+  assert.equal(legacyTrack.title, '旧笔记');
+  assert.equal(legacyTrack.text, '旧内容');
+  const legacyTemplateTrack = trackApi.parseTrack('---\ncreated: "2026-11-08"\n---\n\n# 旧模板\n\n## 逻辑\n\n内容甲\n\n## 记录\n\n### 2026-11-10\n\n内容乙\n\n## 结论\n', 'fallback');
+  assert.equal(legacyTemplateTrack.text, '内容甲\n\n内容乙');
+  const trackPlugin = new api.default();
+  trackPlugin.settings = api.loadReviewSettings(null);
+  const trackFile = Object.assign(new TFile(), { path: '交易复盘/跟踪/2026/11/2026-11-08-救市政策.md', name: '2026-11-08-救市政策.md', basename: '2026-11-08-救市政策', extension: 'md', stat: { mtime: 1762497600000 } });
+  const trackText = trackApi.trackTemplate('救市政策');
+  const createdTrackFiles = [];
+  trackPlugin.app = { vault: {
+    getMarkdownFiles: () => [trackFile],
+    cachedRead: async () => trackText,
+    getAbstractFileByPath: () => null,
+    createFolder: async () => {},
+    create: async (path, text) => { createdTrackFiles.push([path, text]); return Object.assign(new TFile(), { path }); }
+  } };
+  const loadedTracks = await trackPlugin.getTracks();
+  assert.equal(loadedTracks.length, 1);
+  assert.equal(loadedTracks[0].title, '救市政策');
+  assert.equal(loadedTracks[0].text, '');
+  assert.equal(trackPlugin.trackFolderPath(), '交易复盘/跟踪');
+  await trackPlugin.createTrack('新笔记');
+  assert.match(createdTrackFiles[0][0], /^交易复盘\/跟踪\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-新笔记\.md$/);
+  assert.equal(createdTrackFiles[0][1], '# 新笔记\n\n');
+  const systemApi = modules['./trade-system'];
+  const systemNote = systemApi.systemTemplate('首板低吸', '2026-11-08');
+  assert.match(systemNote, /created: "2026-11-08"/);
+  assert.match(systemNote, /## 适用环境/);
+  assert.match(systemNote, /## 卖出条件/);
+  const parsedSystem = systemApi.parseSystemNote(systemNote, 'fallback');
+  assert.equal(parsedSystem.title, '首板低吸');
+  assert.equal(parsedSystem.created, '2026-11-08');
+  assert.equal(parsedSystem.sections['买入条件'], '');
+  assert.equal(systemApi.SYSTEM_SECTIONS.join(','), '适用环境,买入条件,卖出条件,风控,案例,备注');
+  const systemPlugin = new api.default();
+  systemPlugin.settings = api.loadReviewSettings(null);
+  const systemFile = Object.assign(new TFile(), { path: '交易复盘/交易系统/首板低吸.md', name: '首板低吸.md', basename: '首板低吸', extension: 'md' });
+  systemPlugin.app = { vault: { getMarkdownFiles: () => [systemFile], cachedRead: async () => systemNote } };
+  const loadedPatterns = await systemPlugin.getSystemPatterns();
+  assert.equal(loadedPatterns.length, 1);
+  assert.equal(loadedPatterns[0].sections['买入条件'], '');
+  assert.equal(systemPlugin.systemFolderPath(), '交易复盘/交易系统');
   const drivenData = { title: '央行降准公告', date: '2026-11-06', time: '20:00', event: '盘后宣布降准', expectation: '预期降准 0.25 个百分点', result: '', reaction: '' };
   let drivenNote = eventApi.eventDrivenTemplate(drivenData.title, drivenData.date, drivenData.time);
   assert.match(drivenNote, /date: "2026-11-06"/);
@@ -256,6 +388,24 @@ async function main() {
   assert.throws(() => calendar.expandClosures('2027', '02-30'));
   assert.throws(() => calendar.expandClosures('2027', '2026-01-01'));
   assert.throws(() => calendar.expandClosures('2027', '01-03/01-01'));
+  assert.equal(calendar.isUsTradingDay('2026-11-06'), true);
+  assert.equal(calendar.isUsTradingDay('2026-11-07'), false);
+  assert.equal(calendar.isUsTradingDay('2026-11-26'), false);
+  assert.equal(calendar.isUsTradingDay('2026-11-27'), true);
+  assert.equal(calendar.isUsTradingDay('2026-01-19'), false);
+  assert.equal(calendar.isUsTradingDay('2026-02-16'), false);
+  assert.equal(calendar.isUsTradingDay('2026-04-03'), false);
+  assert.equal(calendar.isUsTradingDay('2026-05-25'), false);
+  assert.equal(calendar.isUsTradingDay('2026-06-19'), false);
+  assert.equal(calendar.isUsTradingDay('2026-07-03'), false);
+  assert.equal(calendar.isUsTradingDay('2026-09-07'), false);
+  assert.equal(calendar.isUsTradingDay('2026-12-25'), false);
+  assert.equal(calendar.isUsTradingDay('2021-06-18'), true);
+  assert.equal(calendar.isUsTradingDay('2021-12-24'), false);
+  assert.equal(calendar.isUsTradingDay('2021-12-31'), true);
+  assert.equal(calendar.isUsTradingDay('2022-06-20'), false);
+  assert.equal(calendar.isUsTradingDay('2027-06-18'), false);
+  assert.equal(calendar.isUsTradingDay('2027-12-31'), true);
   const analysis = modules['./review-analysis'];
   assert.equal(analysis.reviewRange('2026-10-22', 'weekly').start, '2026-10-19');
   assert.equal(analysis.reviewRange('2026-10-22', 'weekly').end, '2026-10-25');

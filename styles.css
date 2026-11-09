@@ -51,12 +51,13 @@
 .tradenote-carryover-actions .clickable-icon { height: 24px; width: 24px; }
 .tradenote-carryover-header svg { height: 13px; width: 13px; }
 .tradenote-carryover-copy { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tradenote-library { min-width: 0; }
+.tradenote-library { border-bottom: 1px solid var(--background-modifier-border); margin-bottom: 18px; min-width: 0; padding-bottom: 12px; }
 .tradenote-library-header { align-items: center; display: grid; gap: 14px; grid-template-columns: 108px minmax(0, 1fr) 86px 32px; margin-bottom: 15px; }
 .tradenote-library-header h3 { font-size: 16px; }
 .tradenote-library-header > div > span { color: var(--text-muted); display: block; font-size: var(--font-ui-smaller); margin-top: 3px; }
-.tradenote-library-header-controls { display: flex; gap: 8px; grid-column: 2 / 5; min-width: 0; }
-.tradenote-search { min-width: 0; width: 100%; }
+.tradenote-library-header-controls { align-items: center; display: flex; gap: 8px; grid-column: 2 / 5; min-width: 0; }
+.tradenote-search { flex: 1 1 auto; min-width: 0; width: auto; }
+.tradenote-dashboard button.tradenote-review-start { border-radius: 4px; box-shadow: none; font-size: var(--font-ui-smaller); height: auto; min-height: 0; padding: 4px 12px; white-space: nowrap; }
 .tradenote-index-toolbar { align-items: center; border-bottom: 1px solid var(--background-modifier-border); border-top: 1px solid var(--background-modifier-border); display: grid; gap: 14px; grid-template-columns: 108px minmax(0, 1fr) 86px 32px; padding: 9px 8px; }
 .tradenote-quick-filters, .tradenote-section-filters, .tradenote-presence-filter { align-items: center; display: flex; gap: 4px; min-width: 0; white-space: nowrap; }
 .tradenote-filter-label { color: var(--text-faint); font-size: var(--font-ui-smaller); margin-right: 2px; }
@@ -76,12 +77,10 @@
 .tradenote-open-date { background: transparent; box-shadow: none; color: var(--text-normal); font-size: var(--font-ui-small); font-weight: var(--font-semibold); padding: 0; text-align: left; }
 .tradenote-open-date:hover { color: var(--text-accent); }
 .tradenote-index-body { display: grid; gap: 4px; min-width: 0; }
-.tradenote-index-excerpt { align-items: center; background: transparent; border: 0; border-radius: 4px; box-shadow: none; color: var(--text-normal); display: grid; gap: 9px; grid-template-columns: 64px minmax(0, 1fr); min-width: 0; padding: 3px 5px; text-align: left; width: 100%; }
+.tradenote-index-excerpt { align-items: start; background: transparent; border: 0; border-radius: 4px; box-shadow: none; color: var(--text-normal); display: grid; gap: 9px; grid-template-columns: 64px minmax(0, 1fr); height: auto; min-height: 0; min-width: 0; padding: 3px 5px; text-align: left; width: 100%; }
 .tradenote-index-excerpt:hover { background: var(--background-secondary); color: var(--text-accent); }
 .tradenote-index-section { color: var(--text-muted); font-size: var(--font-ui-smaller); }
-.tradenote-index-summary { min-width: 0; }
-.tradenote-index-body.is-single-line .tradenote-index-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tradenote-index-body.is-multiline .tradenote-index-summary { line-height: 1.55; overflow-wrap: anywhere; white-space: normal; }
+.tradenote-index-summary { line-height: 1.55; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .tradenote-index-completeness, .tradenote-index-meta { color: var(--text-muted); font-size: var(--font-ui-smaller); text-align: left; white-space: nowrap; }
 .tradenote-index-completeness { align-items: end; display: grid; gap: 3px; justify-items: end; }
 .tradenote-index-meter { display: flex; gap: 2px; width: 42px; }
@@ -95,7 +94,7 @@
 .tradenote-load-more { background: transparent; border: 1px solid var(--background-modifier-border); border-radius: 3px; box-shadow: none; color: var(--text-muted); display: block; font-size: var(--font-ui-smaller); margin: 14px auto 0; padding: 6px 10px; }
 .tradenote-load-more:hover { background: var(--background-secondary); color: var(--text-normal); }
 @media (max-width: 860px) { .tradenote-workspace { grid-template-columns: 1fr; } .tradenote-calendar-workspace { border-bottom: 1px solid var(--background-modifier-border); border-right: 0; padding: 0 0 20px; } .tradenote-today-workspace { margin: 18px 0 0; padding: 16px; } }
-@media (max-width: 640px) { .tradenote-dashboard-inner { padding: 16px; } .tradenote-dashboard-header { align-items: flex-start; flex-direction: column; gap: 12px; } .tradenote-header-actions { width: 100%; } .tradenote-header-actions input { flex: 1; } .tradenote-calendar-blank, .tradenote-day { height: 45px; min-height: 45px; } .tradenote-library-header, .tradenote-index-toolbar, .tradenote-index-table-header, .tradenote-index-row { gap: 8px; grid-template-columns: 80px minmax(0, 1fr) 76px 32px; } .tradenote-library-header-controls { grid-column: 2 / 5; } .tradenote-sort { flex: 0 0 76px; } .tradenote-index-toolbar .tradenote-clear-filters { grid-column: 4; } .tradenote-index-excerpt { grid-template-columns: 54px minmax(0, 1fr); } }
+@media (max-width: 640px) { .tradenote-dashboard-inner { padding: 16px; } .tradenote-dashboard-header { align-items: flex-start; flex-direction: column; gap: 12px; } .tradenote-header-actions { width: 100%; } .tradenote-header-actions input { flex: 1; } .tradenote-calendar-blank, .tradenote-day { height: 45px; min-height: 45px; } .tradenote-library-header, .tradenote-index-toolbar, .tradenote-index-table-header, .tradenote-index-row { gap: 8px; grid-template-columns: 80px minmax(0, 1fr) 76px 32px; } .tradenote-library-header-controls { flex-wrap: wrap; grid-column: 2 / 5; } .tradenote-library-header-controls .tradenote-search { flex-basis: 100%; } .tradenote-sort { flex: 0 0 76px; } .tradenote-index-toolbar .tradenote-clear-filters { grid-column: 4; } .tradenote-index-excerpt { grid-template-columns: 54px minmax(0, 1fr); } }
 .tradenote-analysis-input, .tradenote-analysis-output { box-sizing: border-box; width: 100%; resize: vertical; white-space: pre-wrap; line-height: 1.6; }
 .tradenote-analysis-input { min-height: 180px; }
 .tradenote-analysis-output { min-height: 340px; margin-top: 12px; }
@@ -131,7 +130,7 @@
 .tradenote-quick-date { align-self: start; background: transparent; border: 1px solid transparent; border-radius: 3px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); padding: 4px 6px; text-align: left; white-space: nowrap; }
 .tradenote-quick-date:hover { background: var(--background-secondary); color: var(--text-normal); }
 .tradenote-quick-body { min-width: 0; }
-.tradenote-quick-text { color: var(--text-normal); display: block; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tradenote-quick-text { color: var(--text-normal); display: block; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
 .tradenote-quick-tags-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
 .tradenote-quick-tag-label { color: var(--text-accent); font-size: var(--font-ui-smaller); }
 @media (max-width: 640px) { .tradenote-quicknotes-controls { flex-wrap: wrap; } .tradenote-quick-row { grid-template-columns: 1fr; } }
@@ -162,12 +161,12 @@
 .tradenote-event.is-past { opacity: 0.78; }
 .tradenote-event-content { min-width: 0; }
 .tradenote-event-main { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; min-width: 0; }
-.tradenote-events button.tradenote-event-title { appearance: none; background: transparent; border: 0; border-radius: 3px; box-shadow: none; color: var(--text-normal); font-size: 17px; font-weight: var(--font-semibold); height: auto; line-height: 1.35; min-height: 0; padding: 0; text-align: left; }
-.tradenote-events button.tradenote-event-title:hover { color: var(--text-accent); }
-.tradenote-events button.tradenote-event-title:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; }
+.tradenote-events button.tradenote-event-title, .tradenote-tracks button.tradenote-event-title, .tradenote-system button.tradenote-event-title { appearance: none; background: transparent; border: 0; border-radius: 3px; box-shadow: none; color: var(--text-normal); font-size: 17px; font-weight: var(--font-semibold); height: auto; line-height: 1.35; min-height: 0; padding: 0; text-align: left; }
+.tradenote-events button.tradenote-event-title:hover, .tradenote-tracks button.tradenote-event-title:hover, .tradenote-system button.tradenote-event-title:hover { color: var(--text-accent); }
+.tradenote-events button.tradenote-event-title:focus-visible, .tradenote-tracks button.tradenote-event-title:focus-visible, .tradenote-system button.tradenote-event-title:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; }
 .tradenote-event-meta { align-items: center; color: var(--text-muted); display: flex; flex-wrap: wrap; font-size: var(--font-ui-smaller); gap: 10px; margin-top: 4px; }
-.tradenote-events button.tradenote-event-edit { background: transparent; border: 0; border-radius: 4px; box-shadow: none; color: var(--text-faint); font-size: var(--font-ui-smaller); height: auto; min-height: 0; padding: 2px 7px; }
-.tradenote-events button.tradenote-event-edit:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.tradenote-events button.tradenote-event-edit, .tradenote-tracks button.tradenote-event-edit, .tradenote-system button.tradenote-event-edit { background: transparent; border: 0; border-radius: 4px; box-shadow: none; color: var(--text-faint); font-size: var(--font-ui-smaller); height: auto; min-height: 0; padding: 2px 7px; }
+.tradenote-events button.tradenote-event-edit:hover, .tradenote-tracks button.tradenote-event-edit:hover, .tradenote-system button.tradenote-event-edit:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 .tradenote-event-texts { display: grid; gap: 5px; margin-top: 10px; }
 .tradenote-event-text { color: var(--text-muted); display: flex; font-size: var(--font-ui-smaller); gap: 8px; line-height: 1.5; min-width: 0; }
 .tradenote-event-text-label { color: var(--text-faint); flex: 0 0 auto; min-width: 4em; }
@@ -191,6 +190,22 @@
 .tradenote-event-driven-form .tradenote-event-input { min-height: 70px; }
 @media (max-width: 640px) { .tradenote-events-header-actions { flex-wrap: wrap; } .tradenote-event-controls { flex-wrap: wrap; } }
 
+.tradenote-tracks-container .view-content, .tradenote-system-container .view-content { padding: 0; }
+.tradenote-tracks, .tradenote-system { height: 100%; overflow: auto; }
+.tradenote-tracks-inner, .tradenote-system-inner { box-sizing: border-box; margin: 0 auto; max-width: 980px; padding: 26px 34px 56px; }
+.tradenote-tracks-header, .tradenote-system-header { align-items: flex-start; display: flex; justify-content: space-between; margin-bottom: 22px; }
+.tradenote-tracks-header h2, .tradenote-system-header h2 { font-size: 24px; letter-spacing: -0.01em; margin: 0; }
+.tradenote-tracks-header > div > span, .tradenote-system-header > div > span { display: block; font-size: var(--font-ui-smaller); margin-top: 4px; }
+.tradenote-tracks-header-actions, .tradenote-system-header-actions { align-items: center; display: flex; gap: 8px; }
+.tradenote-tracks-header-actions .mod-cta, .tradenote-system-header-actions .mod-cta { border-radius: 4px; box-shadow: none; font-size: var(--font-ui-smaller); padding: 4px 12px; }
+.tradenote-tracks-controls, .tradenote-system-controls { align-items: center; display: flex; gap: 8px; margin-bottom: 16px; }
+.tradenote-tracks-search, .tradenote-system-search { flex: 1; min-width: 0; }
+.tradenote-tracks-list, .tradenote-system-list { margin-bottom: 26px; }
+.tradenote-tracks button.tradenote-track-row { background: transparent; border: 0; border-bottom: 1px solid var(--background-modifier-border); border-radius: 0; box-shadow: none; color: var(--text-normal); display: block; font-size: 15px; font-weight: var(--font-semibold); height: auto; min-height: 0; padding: 11px 8px; text-align: left; width: 100%; }
+.tradenote-tracks button.tradenote-track-row:first-child { border-top: 1px solid var(--background-modifier-border); }
+.tradenote-tracks button.tradenote-track-row:hover { background: var(--background-secondary); color: var(--text-accent); }
+@media (max-width: 640px) { .tradenote-tracks-inner, .tradenote-system-inner { padding: 16px; } .tradenote-tracks-header, .tradenote-system-header { flex-direction: column; gap: 10px; } }
+
 .tradenote-countdown-panel { border-bottom: 1px solid var(--background-modifier-border); margin-bottom: 18px; padding-bottom: 10px; }
 .tradenote-countdown-header { align-items: center; display: flex; justify-content: space-between; margin-bottom: 4px; }
 .tradenote-countdown-header h3 { font-size: 16px; margin: 0; }
@@ -204,11 +219,53 @@
 .tradenote-dashboard button.tradenote-countdown-row.is-today { background: color-mix(in srgb, var(--interactive-accent) 7%, transparent); }
 .tradenote-countdown-date { color: var(--text-muted); font-size: var(--font-ui-smaller); white-space: nowrap; }
 .tradenote-countdown-title { color: var(--text-normal); font-size: 15px; font-weight: var(--font-semibold); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tradenote-countdown-count { align-items: flex-end; display: flex; flex-direction: column; gap: 1px; }
+.tradenote-countdown-count { align-items: flex-start; display: flex; flex-direction: column; gap: 1px; }
 .tradenote-countdown-stat { color: var(--text-muted); font-size: 11px; line-height: 1.25; white-space: nowrap; }
 .tradenote-countdown-stat strong { color: var(--text-accent); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tradenote-countdown-today { color: var(--text-accent); font-size: 15px; font-weight: 600; }
 .tradenote-dashboard button.tradenote-countdown-more { background: transparent; border: 0; border-radius: 4px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); height: auto; min-height: 0; margin-top: 2px; padding: 4px 6px; width: 100%; }
 .tradenote-dashboard button.tradenote-countdown-more:hover { background: var(--background-secondary); color: var(--text-normal); }
 .tradenote-countdown-empty { padding: 12px 0; text-align: left; }
-@media (max-width: 640px) { .tradenote-dashboard button.tradenote-countdown-row { gap: 8px; grid-template-columns: minmax(70px, auto) minmax(0, 1fr) auto; } .tradenote-countdown-stat { font-size: 10px; } .tradenote-countdown-stat strong { font-size: 15px; } }
+.tradenote-viewpoint-panel { border-bottom: 1px solid var(--background-modifier-border); margin-bottom: 18px; padding-bottom: 12px; }
+.tradenote-viewpoint-header { align-items: center; display: flex; gap: 8px; justify-content: space-between; margin-bottom: 8px; }
+.tradenote-viewpoint-heading { align-items: baseline; display: flex; flex-wrap: wrap; gap: 2px 8px; }
+.tradenote-viewpoint-heading h3 { font-size: 16px; margin: 0; }
+.tradenote-viewpoint-heading .tradenote-muted { font-size: var(--font-ui-smaller); }
+.tradenote-viewpoint-actions { align-items: center; display: flex; flex-shrink: 0; gap: 2px; }
+.tradenote-viewpoint { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-left: 3px solid var(--interactive-accent); border-radius: 6px; padding: 10px 12px; }
+.tradenote-viewpoint-body { color: var(--text-normal); font-size: var(--font-ui-small); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.tradenote-viewpoint-body.is-empty { color: var(--text-faint); }
+.tradenote-viewpoint-input { box-sizing: border-box; min-height: 200px; resize: vertical; width: 100%; }
+.tradenote-feel-panel { border-bottom: 1px solid var(--background-modifier-border); margin-bottom: 18px; padding-bottom: 12px; }
+.tradenote-feel-header { align-items: center; display: flex; flex-wrap: wrap; gap: 6px 8px; justify-content: space-between; margin-bottom: 8px; }
+.tradenote-feel-heading { align-items: baseline; display: flex; flex-wrap: wrap; gap: 2px 8px; }
+.tradenote-feel-heading h3 { font-size: 16px; margin: 0; }
+.tradenote-feel-heading .tradenote-muted { font-size: var(--font-ui-smaller); }
+.tradenote-feel-actions { align-items: center; display: flex; flex-shrink: 0; gap: 6px; }
+.tradenote-dashboard button.tradenote-feel-record { background: transparent; border: 1px solid var(--background-modifier-border); border-radius: 4px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); height: auto; min-height: 0; padding: 3px 10px; }
+.tradenote-dashboard button.tradenote-feel-record:hover { background: var(--background-secondary); color: var(--text-normal); }
+.tradenote-feel-list { display: flex; flex-direction: column; gap: 1px; }
+.tradenote-dashboard button.tradenote-feel-row { align-items: center; background: transparent; border: 0; border-radius: 4px; box-shadow: none; display: grid; gap: 10px; grid-template-columns: minmax(72px, auto) auto auto minmax(0, 1fr); height: auto; min-height: 0; padding: 7px 6px; text-align: left; width: 100%; }
+.tradenote-dashboard button.tradenote-feel-row:hover { background: var(--background-secondary); }
+.tradenote-dashboard button.tradenote-feel-row.is-today { background: color-mix(in srgb, var(--interactive-accent) 7%, transparent); }
+.tradenote-feel-date { color: var(--text-muted); font-size: var(--font-ui-smaller); white-space: nowrap; }
+.tradenote-feel-side { align-items: center; display: flex; gap: 6px; }
+.tradenote-feel-market { color: var(--text-faint); font-size: 10px; }
+.tradenote-feel-closed { color: var(--text-faint); font-size: 10px; }
+.tradenote-feel-meter { align-items: center; display: inline-flex; gap: 2px; }
+.tradenote-feel-meter span:not(.tradenote-feel-value) { background: var(--background-modifier-border); border-radius: 2px; display: inline-block; height: 6px; width: 8px; }
+.tradenote-feel-meter span.is-filled { background: var(--interactive-accent); }
+.tradenote-feel-value { color: var(--text-muted); font-size: var(--font-ui-smaller); font-variant-numeric: tabular-nums; margin-left: 2px; min-width: 1em; text-align: right; }
+.tradenote-feel-note { color: var(--text-muted); font-size: var(--font-ui-smaller); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tradenote-feel-empty { padding: 8px 0; }
+.tradenote-feel-form { margin-bottom: 16px; }
+.tradenote-feel-form-header { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.tradenote-feel-form-title { font-weight: var(--font-semibold); }
+.tradenote-feel-form-scores { display: flex; gap: 4px; }
+.tradenote-feel-form button.tradenote-feel-score { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 4px; box-shadow: none; color: var(--text-muted); font-size: var(--font-ui-smaller); height: 28px; min-height: 0; padding: 0; width: 30px; }
+.tradenote-feel-form button.tradenote-feel-score:hover { color: var(--text-normal); }
+.tradenote-feel-form button.tradenote-feel-score.is-active { background: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
+.tradenote-feel-form-hint { color: var(--text-muted); font-size: var(--font-ui-smaller); min-width: 3em; }
+.tradenote-feel-input { box-sizing: border-box; min-height: 86px; resize: vertical; width: 100%; }
+.tradenote-feel-date-input { box-sizing: border-box; width: 100%; }
+@media (max-width: 640px) { .tradenote-dashboard button.tradenote-countdown-row { gap: 8px; grid-template-columns: minmax(70px, auto) minmax(0, 1fr) auto; } .tradenote-countdown-stat { font-size: 10px; } .tradenote-countdown-stat strong { font-size: 15px; } .tradenote-dashboard button.tradenote-feel-row { grid-template-columns: minmax(64px, auto) auto auto; } .tradenote-feel-note { grid-column: 1 / -1; } }
