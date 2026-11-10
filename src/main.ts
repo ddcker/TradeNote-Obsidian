@@ -42,7 +42,7 @@ function loadReviewSettings(value: unknown): StockReviewSettings {
   return settings;
 }
 
-const SECTIONS = ["A股市场", "美股市场", "昨日验证", "今日操作", "今日反思", "明日计划"] as const;
+const SECTIONS = ["A股市场", "美股市场", "昨日验证", "今日操作", "设想操作", "今日反思", "明日计划"] as const;
 const FEEL_SCORE_LABELS = ["", "很差", "较差", "中性", "较好", "很好"] as const;
 export const DASHBOARD_VIEW_TYPE = "tradenote-dashboard";
 export const EVENTS_VIEW_TYPE = "tradenote-events";
@@ -1859,7 +1859,7 @@ export default class StockReviewPlugin extends Plugin {
     }
   }
   private imageExtension(mimeType: string): string { return ({ "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg" } as Record<string, string>)[mimeType] ?? ""; }
-  private dailyTemplate(_date: string): string { return "# A股市场\n\n# 美股市场\n\n# 昨日验证\n\n# 今日操作\n\n# 今日反思\n\n# 明日计划\n"; }
+  private dailyTemplate(_date: string): string { return "# A股市场\n\n# 美股市场\n\n# 昨日验证\n\n# 今日操作\n\n# 设想操作\n\n# 今日反思\n\n# 明日计划\n"; }
   async openSettings(): Promise<void> { (this.app as App & { setting: { open(): void; openTabById(id: string): void } }).setting.open(); (this.app as App & { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById(this.manifest.id); }
   async restart(): Promise<void> { const plugins = (this.app as App & { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins; await plugins.disablePlugin(this.manifest.id); await plugins.enablePlugin(this.manifest.id); }
 }
