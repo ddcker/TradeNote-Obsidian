@@ -35,3 +35,8 @@ export function replaceSection(markdown: string, title: string, value: string): 
   const result = [...lines.slice(0, heading.index + 1), "", ...bodyLines, "", ...lines.slice(end)].join("\n");
   return `${result.replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
 }
+
+export function renameSectionHeading(markdown: string, from: string, to: string): string {
+  const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return markdown.replace(new RegExp(`^(#{1,2})[ \\t]+${escaped}[ \\t]*$`, "gm"), `$1 ${to}`);
+}

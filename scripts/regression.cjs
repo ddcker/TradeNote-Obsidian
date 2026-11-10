@@ -106,6 +106,10 @@ async function main() {
   assert.doesNotMatch(bodyText, /a\.png|https:/);
   assert.match(bodyText, /链接/);
   assert.equal(api.reviewBodyText('字'.repeat(200)).length, 200);
+  const sectionApi = modules['./markdown-sections'];
+  assert.equal(sectionApi.renameSectionHeading('# 昨日验证\n\n内容', '昨日验证', '次日验证'), '# 次日验证\n\n内容');
+  assert.equal(sectionApi.renameSectionHeading('## 昨日验证\n\n内容', '昨日验证', '次日验证'), '## 次日验证\n\n内容');
+  assert.equal(sectionApi.renameSectionHeading('# 今日反思\n\n内容', '昨日验证', '次日验证'), '# 今日反思\n\n内容');
   const tagApi = modules['./review-tags'];
   assert.equal(tagApi.extractTags('# A股市场\n降准 #救市政策 #来源/北漠海').join(','), '救市政策,来源/北漠海');
   assert.equal(tagApi.extractTags('```\n#代码标签\n```\n正文 #保留').join(','), '保留');

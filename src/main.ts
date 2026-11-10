@@ -3,7 +3,7 @@ import { builtInClosures, expandClosures, HOLIDAY_RANGES, calendarCheckTarget, i
 import { plainReviewText, reviewRange, ReviewPeriod } from "./review-analysis";
 import { extractTags, mergeTags, normalizeTag, planTagInsertion } from "./review-tags";
 import { appendQuickNote as buildQuickNoteFile, parseQuickNotes, quickNoteBody, quickNoteHeader, QuickNoteEntry } from "./quick-notes";
-import { sectionText } from "./markdown-sections";
+import { renameSectionHeading, sectionText } from "./markdown-sections";
 import { EventData, EventDrivenData, eventCountdown, eventDrivenSections, eventDrivenStatus, eventDrivenTemplate, eventSections, eventSlug, eventTemplate, eventWeekday, normalizeEventTitle, parseEventMeta, parseEventNote, updateEventDrivenNote, updateEventNote } from "./events";
 import { parseTrack, trackTemplate, TrackData } from "./tracks";
 import { parseSystemNote, systemTemplate, SYSTEM_SECTIONS, SystemPattern } from "./trade-system";
@@ -42,7 +42,7 @@ function loadReviewSettings(value: unknown): StockReviewSettings {
   return settings;
 }
 
-const SECTIONS = ["A股市场", "美股市场", "昨日验证", "今日操作", "设想操作", "今日反思", "明日计划"] as const;
+const SECTIONS = ["A股市场", "美股市场", "次日验证", "今日操作", "设想操作", "逻辑训练", "今日反思", "明日计划"] as const;
 const FEEL_SCORE_LABELS = ["", "很差", "较差", "中性", "较好", "很好"] as const;
 export const DASHBOARD_VIEW_TYPE = "tradenote-dashboard";
 export const EVENTS_VIEW_TYPE = "tradenote-events";
@@ -1301,7 +1301,7 @@ export default class StockReviewPlugin extends Plugin {
     const savedSettings: unknown = await this.loadData();
     this.settings = loadReviewSettings(savedSettings);
     this.applyCalendar();
-    this.app.workspace.onLayoutReady(() => { if (!this.calendarCheckStopped) void this.checkAnnualCalendar(); });
+    this.app.workspace.onLayoutReady(() => { if (!this.calendarCheckStopped) void this.checkAnnualCalendar(); void this.migrateReviewSections(); });
     this.registerInterval(window.setInterval(() => void this.checkAnnualCalendar(), 60 * 60 * 1000));
     this.addSettingTab(new StockReviewSettingTab(this.app, this));
     this.registerView(DASHBOARD_VIEW_TYPE, (leaf) => new StockReviewDashboardView(leaf, this));
@@ -1438,6 +1438,19 @@ export default class StockReviewPlugin extends Plugin {
   isTradingDay(date: string): boolean { return isChinaTradingDay(date); }
   isUsTradingDay(date: string): boolean { return isUsMarketTradingDay(date); }
   isMarketFeelTradingDay(date: string): boolean { return this.isTradingDay(date) || isUsMarketTradingDay(date); }
+  private async migrateReviewSections(): Promise<void> {
+    const files = this.app.vault.getMarkdownFiles().filter(file => this.isDailyReview(file) && this.app.metadataCache.getFileCache(file)?.headings?.some(heading => heading.heading === "昨日验证"));
+    if (!files.length) return;
+    let migrated = 0;
+    for (const file of files) {
+      await this.app.vault.process(file, text => {
+        const next = renameSectionHeading(text, "昨日验证", "次日验证");
+        if (next !== text) migrated += 1;
+        return next;
+      });
+    }
+    if (migrated) new Notice(`已将 ${migrated} 篇日报的「昨日验证」更新为「次日验证」`);
+  }
   attachmentRootPath(): string { return joinPath(this.settings.rootFolder, this.settings.attachmentFolder); }
   quickFolderPath(): string { return joinPath(this.settings.rootFolder, this.settings.quickFolder); }
   quickNotePath(date: string): string { return joinPath(this.quickFolderPath(), date.slice(0, 4), date.slice(5, 7), `${date}.md`); }
@@ -1859,7 +1872,7 @@ export default class StockReviewPlugin extends Plugin {
     }
   }
   private imageExtension(mimeType: string): string { return ({ "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg" } as Record<string, string>)[mimeType] ?? ""; }
-  private dailyTemplate(_date: string): string { return "# A股市场\n\n# 美股市场\n\n# 昨日验证\n\n# 今日操作\n\n# 设想操作\n\n# 今日反思\n\n# 明日计划\n"; }
+  private dailyTemplate(_date: string): string { return "# A股市场\n\n# 美股市场\n\n# 次日验证\n\n# 今日操作\n\n# 设想操作\n\n# 逻辑训练\n\n# 今日反思\n\n# 明日计划\n"; }
   async openSettings(): Promise<void> { (this.app as App & { setting: { open(): void; openTabById(id: string): void } }).setting.open(); (this.app as App & { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById(this.manifest.id); }
   async restart(): Promise<void> { const plugins = (this.app as App & { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins; await plugins.disablePlugin(this.manifest.id); await plugins.enablePlugin(this.manifest.id); }
 }
