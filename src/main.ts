@@ -1,4 +1,4 @@
-import { App, Editor, ItemView, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, SuggestModal, TFile, TFolder, WorkspaceLeaf, normalizePath, requestUrl, requireApiVersion, setIcon } from "obsidian";
+import { App, Editor, ItemView, MarkdownRenderer, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, SuggestModal, TFile, TFolder, WorkspaceLeaf, normalizePath, requestUrl, requireApiVersion, setIcon } from "obsidian";
 import { builtInClosures, expandClosures, HOLIDAY_RANGES, calendarCheckTarget, isUsTradingDay as isUsMarketTradingDay, parseAnnualClosures } from "./market-calendar";
 import { plainReviewText, reviewRange, ReviewPeriod } from "./review-analysis";
 import { extractTags, mergeTags, normalizeTag, planTagInsertion } from "./review-tags";
@@ -42,7 +42,7 @@ function loadReviewSettings(value: unknown): StockReviewSettings {
   return settings;
 }
 
-const SECTIONS = ["A股市场", "美股市场", "次日验证", "今日操作", "设想操作", "逻辑训练", "今日反思", "明日计划"] as const;
+const SECTIONS = ["A股市场", "美股市场", "今日操作", "设想操作", "逻辑训练", "今日反思", "明日计划", "次日验证"] as const;
 const FEEL_SCORE_LABELS = ["", "很差", "较差", "中性", "较好", "很好"] as const;
 export const DASHBOARD_VIEW_TYPE = "tradenote-dashboard";
 export const EVENTS_VIEW_TYPE = "tradenote-events";
@@ -1254,10 +1254,19 @@ class StockReviewDashboardView extends ItemView {
     for (const section of visibleSections) {
       const value = entry.sections[section];
       if (!value) continue;
-      const line = body.createEl("button", { cls: "tradenote-index-excerpt", attr: { type: "button", "aria-label": `打开 ${entry.date} 的${section}` } });
-      line.createSpan({ cls: "tradenote-index-section", text: section });
-      line.createSpan({ cls: "tradenote-index-summary", text: reviewBodyText(value) });
-      line.addEventListener("click", () => void this.plugin.openReviewSection(entry.file, section));
+      const openSection = (): void => { void this.plugin.openReviewSection(entry.file, section); };
+      const line = body.createDiv({ cls: "tradenote-index-excerpt" });
+      const label = line.createEl("button", { cls: "tradenote-index-section", text: section, attr: { type: "button", "aria-label": `打开 ${entry.date} 的${section}` } });
+      label.addEventListener("click", openSection);
+      const summary = line.createDiv({ cls: "tradenote-index-summary markdown-rendered", attr: { role: "button", tabindex: "0", "aria-label": `打开 ${entry.date} 的${section}` } });
+      summary.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest("a")) return;
+        openSection();
+      });
+      summary.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSection(); } });
+      const text = reviewBodyText(value);
+      void MarkdownRenderer.render(this.app, text, summary, entry.file.path, this).catch(() => { summary.setText(text); });
     }
     if (!body.childElementCount) body.createSpan({ cls: "tradenote-muted", text: this.tagFilter ? "该标签不在板块内" : this.sectionFilter === "全部" ? "各板块尚无正文" : `未填写${this.sectionFilter}` });
     row.createSpan({ cls: "tradenote-index-meta", text: new Date(entry.file.stat.mtime).toLocaleDateString("zh-CN") });
@@ -1872,7 +1881,7 @@ export default class StockReviewPlugin extends Plugin {
     }
   }
   private imageExtension(mimeType: string): string { return ({ "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg" } as Record<string, string>)[mimeType] ?? ""; }
-  private dailyTemplate(_date: string): string { return "# A股市场\n\n# 美股市场\n\n# 次日验证\n\n# 今日操作\n\n# 设想操作\n\n# 逻辑训练\n\n# 今日反思\n\n# 明日计划\n"; }
+  private dailyTemplate(_date: string): string { return "# A股市场\n\n# 美股市场\n\n# 今日操作\n\n# 设想操作\n\n# 逻辑训练\n\n# 今日反思\n\n# 明日计划\n\n# 次日验证\n"; }
   async openSettings(): Promise<void> { (this.app as App & { setting: { open(): void; openTabById(id: string): void } }).setting.open(); (this.app as App & { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById(this.manifest.id); }
   async restart(): Promise<void> { const plugins = (this.app as App & { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins; await plugins.disablePlugin(this.manifest.id); await plugins.enablePlugin(this.manifest.id); }
 }

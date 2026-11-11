@@ -22,7 +22,7 @@ class MockSetting {
   addDropdown(fn) { return this.control(fn); }
 }
 let request = async () => { throw new Error('Unexpected network request'); };
-const obsidian = { App: class {}, ItemView: class {}, MarkdownView: class {}, Modal: class {}, Notice: class { constructor(message) { notices.push(message); } }, Plugin: class {}, PluginSettingTab: class {}, Setting: MockSetting, SuggestModal: class { constructor() {} setPlaceholder() {} }, requireApiVersion: () => supportsDeclarative, TFile, TFolder, normalizePath: s => s.replace(/\\/g, '/'), requestUrl: (...args) => request(...args), setIcon() {} };
+const obsidian = { App: class {}, ItemView: class {}, MarkdownView: class {}, MarkdownRenderer: { render: async () => {} }, Modal: class {}, Notice: class { constructor(message) { notices.push(message); } }, Plugin: class {}, PluginSettingTab: class {}, Setting: MockSetting, SuggestModal: class { constructor() {} setPlaceholder() {} }, requireApiVersion: () => supportsDeclarative, TFile, TFolder, normalizePath: s => s.replace(/\\/g, '/'), requestUrl: (...args) => request(...args), setIcon() {} };
 const modules = {};
 for (const name of ['market-calendar', 'review-analysis', 'review-tags', 'quick-notes', 'markdown-sections', 'events', 'market-view', 'market-feel', 'tracks', 'trade-system']) {
   const moduleContext = { exports: {}, require: specifier => modules[specifier] };

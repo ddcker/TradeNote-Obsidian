@@ -5,7 +5,7 @@
 复盘札记（TradeNote）是一款 [Obsidian](https://obsidian.md/) 本地交易复盘插件，用普通 Markdown 笔记记录每天的市场观察、交易操作和思考。它可以轻松实现：
 
 - **日历复盘**：按日期创建和打开复盘（含周末和休市日），查看每天各板块的填写情况；
-- **八段记录**：A股市场、美股市场、次日验证、今日操作、设想操作、逻辑训练、今日反思、明日计划；
+- **八段记录**：A股市场、美股市场、今日操作、设想操作、逻辑训练、今日反思、明日计划、次日验证；
 - **计划承接**：查看上一份复盘的明日计划，复制内容或打开原文；
 - **历史检索**：按月份、日期、正文和复盘板块查找记录，筛选已写或未写内容；
 - **段落标签**：用原生 Obsidian 标签标记观点来源或主题（如 #来源/某某、#救市政策），支持快捷插入和仪表盘筛选；
@@ -84,7 +84,7 @@ pnpm package
 
 - 仪表盘顶部的「复盘资料库」提供「开始复盘」按钮：打开今天的复盘，并定位到第一个未填写的板块；
 - 旁边的日历按钮可以选择过去的日期，创建或打开对应复盘；周末和休市日同样可以记录心得与政策；
-- 日报包含八个一级标题：A股市场、美股市场、次日验证、今日操作、设想操作、逻辑训练、今日反思、明日计划；不添加 YAML 属性，也不预填示例内容。
+- 日报包含八个一级标题：A股市场、美股市场、今日操作、设想操作、逻辑训练、今日反思、明日计划、次日验证；不添加 YAML 属性，也不预填示例内容。
 
 ### 2. 资料库与筛选
 
@@ -217,8 +217,6 @@ pnpm package
 
 # 美股市场
 
-# 次日验证
-
 # 今日操作
 
 # 设想操作
@@ -228,6 +226,8 @@ pnpm package
 # 今日反思
 
 # 明日计划
+
+# 次日验证
 ```
 
 ## 数据与网络说明
@@ -273,7 +273,7 @@ TradeNote is a local-first trading journal for [Obsidian](https://obsidian.md/).
 ### Features
 
 - A calendar for any date, with non-trading days marked and section completion indicators.
-- Eight-section daily notes for A-share and US market observations, next-day verification, trades, hypothetical trades, logic training, reflection, and next-day planning.
+- Eight-section daily notes for A-share and US market observations, trades, hypothetical trades, logic training, reflection, next-day planning, and next-day verification.
 - Native Obsidian paragraph tags such as `#来源/某某` or `#救市政策`, with quick insertion and dashboard filtering.
 - Quick notes for ad-hoc insights, policies, and sources, stored one file per day with native tags and a dashboard filter.
 - An event countdown page with natural-day and A-share trading-day counts, plus expectation and actual-outcome notes.

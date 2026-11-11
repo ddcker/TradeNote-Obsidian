@@ -31,7 +31,7 @@
 .tradenote-day.is-non-trading:not(.has-review):not(.is-future):hover { background: var(--background-secondary); border-color: var(--background-modifier-border-hover); color: var(--text-muted); opacity: 1; }
 .tradenote-day-meter { display: flex; gap: 2px; }
 .tradenote-day-meter span { background: var(--background-modifier-border); border-radius: 1px; flex: 1; height: 3px; }
-.tradenote-day-meter span.is-filled:nth-child(1) { background: var(--stock-observation); }.tradenote-day-meter span.is-filled:nth-child(2) { background: var(--stock-us-market); }.tradenote-day-meter span.is-filled:nth-child(3) { background: var(--stock-validation); }.tradenote-day-meter span.is-filled:nth-child(4) { background: var(--stock-action); }.tradenote-day-meter span.is-filled:nth-child(5) { background: var(--stock-idea); }.tradenote-day-meter span.is-filled:nth-child(6) { background: var(--stock-training); }.tradenote-day-meter span.is-filled:nth-child(7) { background: var(--stock-reflection); }.tradenote-day-meter span.is-filled:nth-child(8) { background: var(--stock-plan); }
+.tradenote-day-meter span.is-filled:nth-child(1) { background: var(--stock-observation); }.tradenote-day-meter span.is-filled:nth-child(2) { background: var(--stock-us-market); }.tradenote-day-meter span.is-filled:nth-child(3) { background: var(--stock-action); }.tradenote-day-meter span.is-filled:nth-child(4) { background: var(--stock-idea); }.tradenote-day-meter span.is-filled:nth-child(5) { background: var(--stock-training); }.tradenote-day-meter span.is-filled:nth-child(6) { background: var(--stock-reflection); }.tradenote-day-meter span.is-filled:nth-child(7) { background: var(--stock-plan); }.tradenote-day-meter span.is-filled:nth-child(8) { background: var(--stock-validation); }
 .tradenote-action-status { color: var(--text-muted); font-size: var(--font-ui-smaller); line-height: 1.5; margin: 0 0 12px; }
 .tradenote-section-progress { border-bottom: 1px solid var(--background-modifier-border); border-top: 1px solid var(--background-modifier-border); margin-bottom: 15px; }
 .tradenote-section-progress-row { align-items: center; background: transparent; border: 0; border-left: 2px solid transparent; border-radius: 0; box-shadow: none; color: var(--text-muted); display: flex; font-size: var(--font-ui-smaller); gap: 8px; padding: 8px 7px; text-align: left; width: 100%; }
@@ -77,10 +77,21 @@
 .tradenote-open-date { background: transparent; box-shadow: none; color: var(--text-normal); font-size: var(--font-ui-small); font-weight: var(--font-semibold); padding: 0; text-align: left; }
 .tradenote-open-date:hover { color: var(--text-accent); }
 .tradenote-index-body { display: grid; gap: 4px; min-width: 0; }
-.tradenote-index-excerpt { align-items: start; background: transparent; border: 0; border-radius: 4px; box-shadow: none; color: var(--text-normal); display: grid; gap: 9px; grid-template-columns: 64px minmax(0, 1fr); height: auto; min-height: 0; min-width: 0; padding: 3px 5px; text-align: left; width: 100%; }
-.tradenote-index-excerpt:hover { background: var(--background-secondary); color: var(--text-accent); }
-.tradenote-index-section { color: var(--text-muted); font-size: var(--font-ui-smaller); }
-.tradenote-index-summary { line-height: 1.55; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.tradenote-index-excerpt { align-items: start; border-radius: 4px; display: grid; gap: 9px; grid-template-columns: 64px minmax(0, 1fr); min-width: 0; padding: 3px 5px; width: 100%; }
+.tradenote-index-excerpt:hover { background: var(--background-secondary); }
+.tradenote-index-section { background: transparent; border: 0; box-shadow: none; color: var(--text-muted); cursor: pointer; font-size: var(--font-ui-smaller); height: auto; min-height: 0; padding: 2px 4px; text-align: left; }
+.tradenote-index-section:hover { color: var(--text-normal); }
+.tradenote-index-summary { cursor: pointer; line-height: 1.55; min-width: 0; overflow-wrap: anywhere; }
+.tradenote-index-summary:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.tradenote-index-summary.markdown-rendered > :first-child { margin-top: 0; }
+.tradenote-index-summary.markdown-rendered > :last-child { margin-bottom: 0; }
+.tradenote-index-summary.markdown-rendered p { margin: 0 0 4px; }
+.tradenote-index-summary.markdown-rendered h1, .tradenote-index-summary.markdown-rendered h2, .tradenote-index-summary.markdown-rendered h3, .tradenote-index-summary.markdown-rendered h4, .tradenote-index-summary.markdown-rendered h5, .tradenote-index-summary.markdown-rendered h6 { font-size: 1.05em; line-height: 1.4; margin: 6px 0 3px; }
+.tradenote-index-summary.markdown-rendered ul, .tradenote-index-summary.markdown-rendered ol { margin: 2px 0 4px; padding-left: 1.3em; }
+.tradenote-index-summary.markdown-rendered blockquote { margin: 4px 0; padding-left: 10px; }
+.tradenote-index-summary.markdown-rendered pre { margin: 4px 0; white-space: pre-wrap; }
+.tradenote-index-summary.markdown-rendered code { font-size: 0.9em; }
+.tradenote-index-summary.markdown-rendered hr { margin: 6px 0; }
 .tradenote-index-completeness, .tradenote-index-meta { color: var(--text-muted); font-size: var(--font-ui-smaller); text-align: left; white-space: nowrap; }
 .tradenote-index-completeness { align-items: end; display: grid; gap: 3px; justify-items: end; }
 .tradenote-index-meter { display: flex; gap: 2px; width: 42px; }
