@@ -199,6 +199,8 @@
 .tradenote-event-status.is-done { background: var(--background-modifier-border); color: var(--text-muted); }
 .tradenote-event-driven.is-pending { border-left: 3px solid var(--interactive-accent); }
 .tradenote-event-driven-form .tradenote-event-input { min-height: 70px; }
+.tradenote-system .tradenote-delete-icon { align-items: center; background: transparent; border: 0; box-shadow: none; color: var(--text-faint); display: inline-flex; height: 22px; justify-content: center; min-height: 0; padding: 0; width: 22px; }
+.tradenote-system .tradenote-delete-icon:hover { background: var(--background-modifier-hover); color: var(--text-error); }
 @media (max-width: 640px) { .tradenote-events-header-actions { flex-wrap: wrap; } .tradenote-event-controls { flex-wrap: wrap; } }
 
 .tradenote-tracks-container .view-content, .tradenote-system-container .view-content { padding: 0; }

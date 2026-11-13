@@ -6,7 +6,7 @@ import { appendQuickNote as buildQuickNoteFile, parseQuickNotes, quickNoteBody, 
 import { renameSectionHeading, sectionText } from "./markdown-sections";
 import { EventData, EventDrivenData, eventCountdown, eventDrivenSections, eventDrivenStatus, eventDrivenTemplate, eventSections, eventSlug, eventTemplate, eventWeekday, normalizeEventTitle, parseEventMeta, parseEventNote, updateEventDrivenNote, updateEventNote } from "./events";
 import { parseTrack, trackTemplate, TrackData } from "./tracks";
-import { parseSystemNote, systemTemplate, SYSTEM_SECTIONS, SystemPattern } from "./trade-system";
+import { parseSystemNote, SystemPattern } from "./trade-system";
 import { marketViewBody, marketViewTemplate, updateMarketView } from "./market-view";
 import { averageMarketFeel, MARKET_FEEL_HEADINGS, marketFeelTemplate, MarketFeelSideKey, MarketFeelSides, normalizeMarketFeelScore, parseMarketFeelNote, updateMarketFeelNote } from "./market-feel";
 
@@ -844,9 +844,23 @@ class SystemModal extends Modal {
     try {
       const file = await this.plugin.createSystemPattern(title);
       this.close();
-      new Notice("已创建交易模式");
-      await this.plugin.openFile(file);
+      new Notice("已创建空白笔记");
+      await this.plugin.openFileForEditing(file);
     } catch (error) { new Notice(`创建失败：${error instanceof Error ? error.message : String(error)}`); }
+  }
+}
+
+class DeleteSystemModal extends Modal {
+  constructor(app: App, private readonly title: string, private readonly onConfirm: () => Promise<void>) { super(app); }
+  onOpen(): void {
+    this.setTitle("删除交易模式");
+    this.contentEl.createEl("p", { text: `确定删除「${this.title}」吗？` });
+    this.contentEl.createEl("p", { cls: "setting-item-description", text: "笔记会通过 Obsidian 的回收站机制删除。" });
+    const actions = this.contentEl.createDiv({ cls: "modal-button-container" });
+    const cancel = actions.createEl("button", { text: "取消", attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    const confirm = actions.createEl("button", { cls: "mod-warning", text: "删除", attr: { type: "button" } });
+    confirm.addEventListener("click", () => { this.close(); void this.onConfirm(); });
   }
 }
 
@@ -922,7 +936,7 @@ class StockReviewSystemView extends ItemView {
     search.addEventListener("compositionend", () => { this.query = search.value.toLowerCase().trim(); void this.render(); });
     if (!patterns.length) { inner.createDiv({ cls: "tradenote-empty", text: "还没有交易模式。点击右上角「新建模式」，把验证过好用的打法记下来。" }); return; }
     const keyword = this.query;
-    const filtered = keyword ? patterns.filter(pattern => [pattern.title, ...SYSTEM_SECTIONS.map(section => pattern.sections[section])].join("\n").toLowerCase().includes(keyword)) : patterns;
+    const filtered = keyword ? patterns.filter(pattern => [pattern.title, pattern.body].join("\n").toLowerCase().includes(keyword)) : patterns;
     const list = inner.createDiv({ cls: "tradenote-system-list" });
     if (!filtered.length) { list.createDiv({ cls: "tradenote-empty", text: "没有匹配的模式。" }); return; }
     for (const pattern of filtered) this.renderPattern(list, pattern);
@@ -932,13 +946,33 @@ class StockReviewSystemView extends ItemView {
     const card = parent.createDiv({ cls: "tradenote-event tradenote-system-pattern" });
     const content = card.createDiv({ cls: "tradenote-event-content" });
     const main = content.createDiv({ cls: "tradenote-event-main" });
-    const name = main.createEl("button", { cls: "tradenote-event-title", text: pattern.title, attr: { type: "button", "aria-label": `打开 ${pattern.title}` } });
-    name.addEventListener("click", () => void this.plugin.openFile(pattern.file));
+    const name = main.createEl("button", { cls: "tradenote-event-title", text: pattern.title, attr: { type: "button", "aria-label": `编辑 ${pattern.title}` } });
+    name.addEventListener("click", () => void this.plugin.openFileForEditing(pattern.file));
     const meta = content.createDiv({ cls: "tradenote-event-meta" });
     meta.createSpan({ text: pattern.created ? `${pattern.created} 创建` : "未记录创建日期" });
+    const edit = meta.createEl("button", { cls: "tradenote-event-edit", text: "编辑", attr: { type: "button" } });
+    edit.addEventListener("click", () => void this.plugin.openFileForEditing(pattern.file));
+    const remove = meta.createEl("button", { cls: "tradenote-delete-icon", attr: { type: "button", "aria-label": `删除 ${pattern.title}`, title: `删除 ${pattern.title}` } });
+    setIcon(remove, "trash-2");
+    remove.addEventListener("click", () => this.deletePattern(pattern));
     const texts = content.createDiv({ cls: "tradenote-event-texts" });
-    const section = SYSTEM_SECTIONS.find(item => pattern.sections[item].trim());
-    eventTextLine(texts, section ?? "内容", section ? pattern.sections[section] : "", "还没有记录内容");
+    const body = pattern.body.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").replace(/^#\s+.*(?:\r?\n)?/m, "").trim();
+    eventTextLine(texts, "内容", body, "空白笔记，点击标题开始写");
+  }
+
+  private deletePattern(pattern: SystemRecord): void {
+    const remove = async (): Promise<void> => {
+      try {
+        await this.app.fileManager.trashFile(pattern.file);
+        new Notice(`已删除 ${pattern.title}`);
+        await this.render();
+      } catch (error) {
+        console.error("Failed to delete system pattern", error);
+        new Notice("删除失败，请重试");
+      }
+    };
+    if (this.plugin.settings.confirmDelete) new DeleteSystemModal(this.app, pattern.title, remove).open();
+    else void remove();
   }
 }
 
@@ -1649,7 +1683,8 @@ export default class StockReviewPlugin extends Plugin {
     const records: SystemRecord[] = [];
     for (const file of files) {
       const text = await this.app.vault.cachedRead(file);
-      records.push({ file, ...parseSystemNote(text, file.basename) });
+      const parsed = parseSystemNote(text, file.basename);
+      records.push({ file, ...parsed, created: parsed.created || dateString(new Date(file.stat.ctime)) });
     }
     return records.sort((left, right) => left.title.localeCompare(right.title, "zh-CN"));
   }
@@ -1664,7 +1699,7 @@ export default class StockReviewPlugin extends Plugin {
     const name = normalizeEventTitle(title);
     if (!name) throw new Error("请输入模式名称");
     await this.ensureFolder(this.systemFolderPath());
-    return this.app.vault.create(await this.systemPath(name), systemTemplate(name, dateString()));
+    return this.app.vault.create(await this.systemPath(name), "");
   }
   async getEventDrivenRecords(): Promise<EventDrivenRecord[]> {
     const prefix = `${this.eventDrivenFolderPath()}/`;
@@ -1799,6 +1834,13 @@ export default class StockReviewPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType("markdown").find((candidate) => candidate.view instanceof MarkdownView && candidate.view.file?.path === file.path);
     const leaf = existing ?? this.app.workspace.getLeaf("tab");
     await leaf.openFile(file);
+    await this.app.workspace.revealLeaf(leaf);
+    return leaf;
+  }
+  async openFileForEditing(file: TFile): Promise<WorkspaceLeaf> {
+    const existing = this.app.workspace.getLeavesOfType("markdown").find((candidate) => candidate.view instanceof MarkdownView && candidate.view.file?.path === file.path);
+    const leaf = existing ?? this.app.workspace.getLeaf("tab");
+    await leaf.openFile(file, { state: { mode: "source" } });
     await this.app.workspace.revealLeaf(leaf);
     return leaf;
   }
